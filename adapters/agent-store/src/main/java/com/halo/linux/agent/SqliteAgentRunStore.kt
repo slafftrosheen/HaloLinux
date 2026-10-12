@@ -76,6 +76,7 @@ class SqliteAgentRunStore(
                           input_request_id TEXT,
                           resolution_request_id TEXT,
                           recovery_fingerprint TEXT,
+                          journal_key TEXT,
                           UNIQUE(run_id, ordinal)
                         )
                     """.trimIndent())
@@ -86,6 +87,11 @@ class SqliteAgentRunStore(
                     stmt.execute("""
                         CREATE UNIQUE INDEX IF NOT EXISTS agent_input_resolution_unique
                         ON agent_steps(resolution_request_id) WHERE resolution_request_id IS NOT NULL
+                    """.trimIndent())
+                    stmt.execute("""
+                        CREATE UNIQUE INDEX IF NOT EXISTS agent_journal_identity_unique
+                        ON agent_steps(run_id, journal_key)
+                        WHERE journal_key IS NOT NULL
                     """.trimIndent())
                     stmt.execute("""
                         CREATE UNIQUE INDEX IF NOT EXISTS agent_recovery_claim_unique
@@ -244,10 +250,23 @@ class SqliteAgentRunStore(
     private fun appendIn(conn: Connection, step: AgentStep): Boolean {
         val payload = CanonicalAgentJson.encodeStep(step)
         val kind = step.javaClass.simpleName
+        if (step is AgentStep.InputRequested) {
+            require(step.input.id == step.requestId && step.input.runId == step.runId) {
+                "Pending input metadata mismatches journal identity"
+            }
+        }
         val requested = (step as? AgentStep.InputRequested)?.requestId?.value
         val resolved = (step as? AgentStep.InputResolved)?.requestId?.value
         val fingerprint = (step as? AgentStep.RecoveryClaimed)?.let {
-            "${it.planKind}|${it.evidenceStepId ?: "<none>"}"
+            org.json.JSONArray(listOf(it.planKind, it.evidenceStepId)).toString()
+        }
+        val journalKey = when (step) {
+            is AgentStep.RunPrepared -> "run_prepared"
+            is AgentStep.ProviderTurnStarted -> "provider_start:${step.turnId.value}"
+            is AgentStep.ProviderTurnCompleted -> "provider_finish:${step.turnId.value}"
+            is AgentStep.ResponseProduced -> "response:${step.responseId}"
+            is AgentStep.ResponseCommitted -> "commit:${step.commitId}"
+            else -> null
         }
         // Fail closed for tools: this version has no tool dispatch/claim codec.
         val ordinal = conn.prepareStatement("""
@@ -259,8 +278,8 @@ class SqliteAgentRunStore(
         return conn.prepareStatement("""
             INSERT OR IGNORE INTO agent_steps(
               id,run_id,ordinal,type,schema_version,payload_json,
-              input_request_id,resolution_request_id,recovery_fingerprint
-            ) VALUES(?,?,?,?,?,?,?,?,?)
+              input_request_id,resolution_request_id,recovery_fingerprint,journal_key
+            ) VALUES(?,?,?,?,?,?,?,?,?,?)
         """.trimIndent()).use { stmt ->
             stmt.setString(1, step.id.value)
             stmt.setString(2, step.runId.value)
@@ -271,6 +290,7 @@ class SqliteAgentRunStore(
             stmt.setString(7, requested)
             stmt.setString(8, resolved)
             stmt.setString(9, fingerprint)
+            stmt.setString(10, journalKey)
             stmt.executeUpdate() == 1
         }
     }
@@ -347,9 +367,19 @@ class SqliteAgentRunStore(
     ): Boolean = withContext(Dispatchers.IO) {
         if (claim.runId != runId || expectedState.isTerminal ||
             expectedState == AgentRunState.EXECUTING) return@withContext false
-        transaction { conn ->
+        try {
+            transaction { conn ->
             val current = getIn(conn, runId.value) ?: return@transaction false
             if (current.state != expectedState) return@transaction false
+            val fingerprint = org.json.JSONArray(listOf(claim.planKind, claim.evidenceStepId)).toString()
+            val duplicate = conn.prepareStatement("""
+                SELECT 1 FROM agent_steps WHERE run_id=? AND recovery_fingerprint=?
+            """.trimIndent()).use { stmt ->
+                stmt.setString(1, runId.value)
+                stmt.setString(2, fingerprint)
+                stmt.executeQuery().use { it.next() }
+            }
+            if (duplicate) return@transaction false
             // Decode/validate the step before claiming the run.
             CanonicalAgentJson.encodeStep(claim)
             val updated = conn.prepareStatement("""
@@ -364,6 +394,9 @@ class SqliteAgentRunStore(
             if (updated != 1) return@transaction false
             if (!appendIn(conn, claim)) throw DuplicateRecoveryClaim()
             true
+            }
+        } catch (_: DuplicateRecoveryClaim) {
+            false
         }
     }
 
