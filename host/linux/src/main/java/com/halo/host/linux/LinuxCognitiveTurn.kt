@@ -121,11 +121,9 @@ class LinuxCognitiveTurn(
             return LinuxTextTurnResult(interactionId, newConversationId, response.text,
                 response.providerId, response.modelId, elapsed, agentRunId, journalState)
         } catch (cancel: CancellationException) {
-            withContext(NonCancellable) {
-                if (!mainCommitted) {
-                    runCatching { storage.markTurn(interactionId, "FAILED", failureType = "CANCELLED") }
-                    runCatching { recoverySupport().failTextTurn(agentRunId, "CANCELLED") }
-                }
+            if (!mainCommitted) withContext(NonCancellable) {
+                runCatching { storage.markTurn(interactionId, "FAILED", failureType = "CANCELLED") }
+                runCatching { recoverySupport().failTextTurn(agentRunId, "CANCELLED") }
                 runtime.publish(InferenceObserved(
                     requestId = interactionId,
                     providerId = provider.snapshot().providerId ?: "unconfigured",
