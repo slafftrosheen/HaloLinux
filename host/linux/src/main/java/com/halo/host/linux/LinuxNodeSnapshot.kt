@@ -78,7 +78,8 @@ internal object LinuxNodeSnapshot {
                 .put("sensitive", true)
                 .put("encrypted", false)
             Files.writeString(manifest, doc.toString(2),
-                java.nio.file.StandardOpenOption.CREATE_NEW)
+                java.nio.file.StandardOpenOption.CREATE_NEW,
+                java.nio.file.StandardOpenOption.WRITE)
             Files.setPosixFilePermissions(manifest, filePermissions)
             JSONObject().put("ok", true).put("path", target.toString())
                 .put("files", records.length())

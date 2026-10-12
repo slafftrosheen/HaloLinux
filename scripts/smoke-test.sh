@@ -87,6 +87,9 @@ PY
 if halo storage backup "$WORK/backup.db" >/dev/null 2>&1; then
   echo "FAIL: backup overwrote existing file" >&2; exit 1
 fi
+mkdir -m 700 "$WORK/snapshots"
+halo node backup "$WORK/snapshots/node-001" >"$WORK/node-backup.json"
+python3 "$ROOT/scripts/verify-node-snapshot.py" "$WORK/snapshots/node-001"
 echo "Restarting to verify durability"
 stop
 start

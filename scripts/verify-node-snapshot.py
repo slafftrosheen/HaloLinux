@@ -5,6 +5,7 @@ This tool never restores, overwrites, unlocks, or exports user data.
 It verifies the manifest, SHA-256, SQLite quick_check, and POSIX privacy bits.
 """
 import argparse
+from contextlib import closing
 import hashlib
 import json
 import os
@@ -71,7 +72,7 @@ def verify(folder: Path) -> int:
             fail(f"Checksum mismatch: {filename}")
         # Open SQLite in read-only mode; this is a VACUUM snapshot (no WAL needed).
         uri = "file:" + quote(str(path), safe="/") + "?mode=ro"
-        with sqlite3.connect(uri, uri=True) as conn:
+        with closing(sqlite3.connect(uri, uri=True)) as conn:
             result = conn.execute("PRAGMA quick_check").fetchone()
             if result is None or result[0] != "ok":
                 fail(f"SQLite integrity failed: {filename}")
