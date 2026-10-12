@@ -92,4 +92,19 @@ class NodeConfigTest {
         assertEquals(home.resolve("halo-data").toString(), config.dataDir)
     }
 
+    @Test fun missingConfigDefaultsButSymlinksAndDirectoriesAreNotSilentlyIgnored() {
+        assertFalse(NodeConfiguration.loadFrom(home.resolve("missing.yaml"), home).providerConfigured)
+        val target = home.resolve("real.yaml")
+        Files.writeString(target, "node:\n  display_name: Safe Pi")
+        val link = home.resolve("link.yaml")
+        Files.createSymbolicLink(link, target)
+        assertThrows(IllegalArgumentException::class.java) {
+            NodeConfiguration.loadFrom(link, home)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            NodeConfiguration.loadFrom(home, home)
+        }
+        assertEquals("Safe Pi", NodeConfiguration.loadFrom(target, home).displayName)
+    }
+
 }

@@ -24,7 +24,18 @@ object NodeConfiguration {
         val home = Path.of(System.getProperty("user.home"))
         val xdg = System.getenv("XDG_CONFIG_HOME")?.let(Path::of) ?: home.resolve(".config")
         val path = System.getenv("HALO_CONFIG_FILE")?.let(Path::of) ?: xdg.resolve("halo-linux/config.yaml")
-        if (!Files.isRegularFile(path)) return parse("", home, null)
+        return loadFrom(path, home)
+    }
+
+    /** Missing is safe; malformed, redirected or oversized config files are not. */
+    internal fun loadFrom(path: Path, home: Path): NodeConfig {
+        if (!Files.exists(path, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
+            return parse("", home, null)
+        }
+        require(!Files.isSymbolicLink(path) &&
+            Files.isRegularFile(path, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
+            "Configuration must be a regular, non-symlink file"
+        }
         require(Files.size(path) <= 100_000) { "Configuration file too large" }
         return parse(Files.readString(path), home, path.toString())
     }
