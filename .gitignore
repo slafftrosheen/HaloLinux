@@ -1,0 +1,54 @@
+# Gradle
+.gradle/
+build/
+*/build/
+!*/src/main/**/build.gradle.kts
+!*/src/test/**/build.gradle.kts
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+hs_err_pid*.log
+replay_pid*.log
+
+# Runtime data
+halo-node.pid
+*.db
+*.db-wal
+*.db-shm
+
+# Secrets (never commit)
+secrets/
+*.key
+*.pem
+*.p12
+*.jks
+
+# Local config
+local.properties
+gradle.local.properties
+
+# Test outputs
+test-results/
+coverage/
+
+# Distribution
+dist/
+*.tar.gz
+*.zip
+
+# JARs (except in libs/)
+*.jar
+!gradle/wrapper/gradle-wrapper.jar

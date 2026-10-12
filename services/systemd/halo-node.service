@@ -1,0 +1,56 @@
+[Unit]
+Description=Halo Linux Node - Personal Compute Host
+Documentation=https://github.com/slafftrosheen/HaloLinux
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+ExecStart=/usr/local/bin/halo-node start
+ExecReload=/bin/kill -HUP $MAINPID
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=30
+Restart=on-failure
+RestartSec=5
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+# Security hardening
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+MemoryMax=4G
+CPUQuota=200%
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=halo-node
+
+# Environment
+Environment=JAVA_HOME=/usr/lib/jvm/default-java
+Environment=HALO_NODE_DATA_DIR=%h/.local/share/halo-linux
+Environment=HALO_NODE_CONFIG_DIR=%h/.config/halo-linux
+Environment=HALO_NODE_CACHE_DIR=%h/.cache/halo-linux
+
+# Working directory
+WorkingDirectory=%h
+
+[Install]
+WantedBy=default.target

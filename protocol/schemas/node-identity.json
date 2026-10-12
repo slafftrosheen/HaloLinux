@@ -1,0 +1,55 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Halo Sync Protocol - Node Identity",
+  "type": "object",
+  "required": ["node_id", "display_name", "public_key", "protocol_version", "software_version", "capabilities", "trust_state"],
+  "properties": {
+    "node_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Persistent unique identifier for this node"
+    },
+    "display_name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100,
+      "description": "Human-readable name for the node"
+    },
+    "public_key": {
+      "type": "string",
+      "format": "base64",
+      "description": "Ed25519 public key for node identity verification"
+    },
+    "protocol_version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Protocol version this node speaks"
+    },
+    "software_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[a-zA-Z0-9]+)?$",
+      "description": "Software version (semver)"
+    },
+    "capabilities": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "List of capability identifiers this node supports"
+    },
+    "trust_state": {
+      "type": "string",
+      "enum": ["unpaired", "paired", "revoked", "expired"],
+      "description": "Current trust relationship state"
+    },
+    "host_info": {
+      "type": "object",
+      "properties": {
+        "os": { "type": "string" },
+        "arch": { "type": "string" },
+        "hostname": { "type": "string" },
+        "cpu_cores": { "type": "integer" },
+        "memory_gb": { "type": "number" }
+      },
+      "description": "Optional host hardware/OS information"
+    }
+  }
+}

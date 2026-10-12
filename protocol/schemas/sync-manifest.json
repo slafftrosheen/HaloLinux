@@ -1,0 +1,54 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Halo Sync Protocol - Sync Manifest",
+  "type": "object",
+  "required": ["sync_id", "origin_node_id", "timestamp", "entries", "schema_version"],
+  "properties": {
+    "sync_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique identifier for this sync operation"
+    },
+    "origin_node_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Node ID initiating the sync"
+    },
+    "target_node_id": {
+      "type": ["string", "null"],
+      "format": "uuid",
+      "description": "Specific target node, or null for broadcast"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Sync initiation timestamp"
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type", "id", "revision", "operation"],
+        "properties": {
+          "type": { "type": "string", "enum": ["memory", "conversation", "notebook", "file"] },
+          "id": { "type": "string", "format": "uuid" },
+          "revision": { "type": "integer", "minimum": 1 },
+          "operation": { "type": "string", "enum": ["create", "update", "delete", "noop"] },
+          "content_hash": { "type": ["string", "null"], "pattern": "^sha256:[a-f0-9]{64}$" },
+          "conflict": { "type": "boolean", "default": false }
+        }
+      },
+      "description": "List of entries to sync"
+    },
+    "schema_version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Sync protocol schema version"
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Extensible metadata"
+    }
+  }
+}
