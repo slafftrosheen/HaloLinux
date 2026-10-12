@@ -140,26 +140,32 @@ object HaloCli {
             storage.initialize(LinuxStorageConfig(dataDir = config.dataDir))
             storage.getNodeIdentity()
         }
+        val runtime = LinuxRuntimeBridge()
         val server = LocalControlServer(socketPath()) { input ->
-            runBlocking { handle(storage, config, input) }
+            runBlocking { handle(storage, config, runtime, input) }
         }
         val shutdown = Thread { server.close() }
         Runtime.getRuntime().addShutdownHook(shutdown)
         try {
-            println("Halo node ready (local control socket; no LAN listener)")
+            runBlocking { runtime.start() }
+            println("Halo node runtime initialized (local socket only; no LAN listener)")
             server.serve()
         } finally {
             server.close()
-            runBlocking { storage.close() }
+            runBlocking {
+                try { runtime.stop() } finally { storage.close() }
+            }
             runCatching { Runtime.getRuntime().removeShutdownHook(shutdown) }
         }
     }
 
-    private suspend fun handle(store: LinuxStorage, config: NodeConfig, input: JSONObject): JSONObject {
+    private suspend fun handle(store: LinuxStorage, config: NodeConfig, runtime: LinuxRuntimeBridge, input: JSONObject): JSONObject {
         val op = input.optString("op")
         return when (op) {
             "status" -> JSONObject().put("ok", true)
-                .put("process", "RUNNING")
+                 .put("process", "RUNNING")
+                .put("runtime", runtime.engine.state.value.javaClass.simpleName)
+                .put("runtime_health", runtime.engine.health.value.name)
                 .put("storage", "READY")
                 .put("inference_configured", config.providerConfigured)
                 .put("provider_connectivity", "NOT_CHECKED")
