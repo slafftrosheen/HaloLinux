@@ -1,0 +1,6 @@
+# Optional systemd --user drop-in.
+# Copy to ~/.config/systemd/user/halo-node.service.d/hardening.conf
+# only after verifying mount/user namespaces work on this Trixie installation.
+[Service]
+PrivateTmp=yes
+ProtectSystem=full

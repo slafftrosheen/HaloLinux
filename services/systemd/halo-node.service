@@ -1,7 +1,9 @@
 [Unit]
-Description=Halo Linux Node (personal headless runtime)
+Description=Halo Linux Node (local-first cognitive runtime)
 Documentation=https://github.com/slafftrosheen/HaloLinux
 After=network.target
+StartLimitIntervalSec=60
+StartLimitBurst=3
 
 [Service]
 Type=simple
@@ -9,18 +11,18 @@ ExecStart=%h/.local/bin/halo-node start
 WorkingDirectory=%h
 Restart=on-failure
 RestartSec=5
-StartLimitIntervalSec=60
-StartLimitBurst=3
 TimeoutStopSec=30
 KillSignal=SIGTERM
 NoNewPrivileges=yes
-PrivateTmp=yes
-ProtectSystem=full
 UMask=0077
 RuntimeDirectory=halo-linux
 RuntimeDirectoryMode=0700
 StandardOutput=journal
 StandardError=journal
+
+# Mount namespace hardening requires kernel/user-namespace compatibility.
+# Enable the separately documented optional drop-in only after verification
+# on Raspberry Pi OS Trixie.
 
 [Install]
 WantedBy=default.target

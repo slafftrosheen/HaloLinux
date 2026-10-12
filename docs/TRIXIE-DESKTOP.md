@@ -136,3 +136,28 @@ Check `docs/PRE-DEPLOYMENT-GATES.md` for the acceptance order.
 Optional canonical agent mode is a separate experiment requiring a second,
 pinned canonical Halo checkout and `verify-canonical-cognition.sh`.
 Do not conflate that with the standalone Pi acceptance build.
+
+## HALO-LINUX-026 — safe user-service updates
+
+The installer now builds the JAR *before* updating the installed binary,
+then stages and atomically renames the JAR and launcher. It never overwrites
+the JAR inode used by an already-running process. It does **not** stop,
+restart, enable or otherwise alter your running Halo service.
+
+The default systemd **user** unit avoids features that depend on unprivileged
+mount namespaces; those hardening directives are available as an optional
+drop-in at `services/systemd/halo-node-hardening.conf.example`. Enable only
+after confirming they are supported on your Trixie kernel.
+
+To adopt new code after installation, use an explicit controlled restart:
+
+```bash
+systemctl --user stop halo-node
+./scripts/install.sh
+systemctl --user daemon-reload
+systemctl --user start halo-node
+systemctl --user status halo-node --no-pager
+```
+
+Keep the same account, XDG paths and node identity. Do not run a manual
+`halo-node start` concurrently with the service.
