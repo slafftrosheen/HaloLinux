@@ -184,3 +184,12 @@ Verification is read-only and checks file hashes, database integrity and file
 permissions. **Snapshots are not encrypted.** Always safeguard private node
 identity and notes. Do not try to copy live SQLite files or restore over a
 running service.
+
+## Low-dependency source verification
+
+Run `./scripts/verify-offline-source.sh` for Bash/Python syntax, the static
+module graph and backup verifier fixtures. It needs no Gradle or AI model,
+but is not an executable Kotlin build.
+
+For private inference questions, `halo-node ask -` accepts bounded text on
+stdin rather than putting the prompt directly in the process argument list.

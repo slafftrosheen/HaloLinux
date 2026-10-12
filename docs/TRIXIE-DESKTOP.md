@@ -163,3 +163,22 @@ systemctl --user status halo-node --no-pager
 
 Keep the same account, XDG paths and node identity. Do not run a manual
 `halo-node start` concurrently with the service.
+
+## Offline check and private text requests
+
+Before attempting network-dependent Gradle tasks, use:
+
+```bash
+./scripts/verify-offline-source.sh
+```
+
+After configuration and daemon startup, to keep a sensitive prompt out of
+the process command-line arguments, use stdin:
+
+```bash
+halo-node ask - < /path/to/private-question.txt
+```
+
+The input is bounded and rejects oversized prompts. Keep the source text file
+private. Avoid assuming that shell-history and process-argument privacy alone
+provide encryption or protect the SQLite conversation database.

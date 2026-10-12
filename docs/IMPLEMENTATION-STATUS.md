@@ -216,3 +216,33 @@ After the standalone build is green, use a detached pinned Halo worktree
 to run `./scripts/verify-canonical-cognition.sh /path/to/Halo-worktree`.
 Do **not** deploy the experimental agent variant, enable tool execution,
 or assume inference readiness based only on committed source.
+
+## HALO-LINUX-031–034 — source hardening and offline test preparation
+
+- **031:** Inference output exceeding the local JSON delivery envelope now fails
+  with typed `AiErrorType.INVALID_RESPONSE` and a sanitized operator message.
+  No false durable conversation commit.
+- **032:** An explicit provider health probe that cannot acquire the inference
+  lease does not mark the still-running provider as DEGRADED. Generation and
+  probing remain serialized with separate admission time limits.
+- **033:** Added `./scripts/verify-offline-source.sh`, a single entry point
+  for Bash/Python syntax, static module graph and synthetic backup verifier
+  regressions without requiring Java, a model, or network access.
+- **034:** `halo-node ask -` now reads a bounded question from standard input,
+  avoiding sensitive question content in shell command arguments. Added stdin
+  boundary and normal-argument tests.
+
+**Source committed, execution not yet verified.** The host environment has JDK
+21 but cannot resolve GitHub/Gradle dependency hosts, so a full repository
+build or JUnit run cannot be claimed. This is still an experimental alpha host.
+
+On first connected x86-64 or Pi 5/Trixie Linux test, run:
+
+```bash
+./scripts/verify-offline-source.sh
+./gradlew clean build --no-daemon --stacktrace
+./scripts/smoke-test.sh
+```
+
+Run the separate pinned canonical cognition build only after the normal
+standalone build passes, with actual compiler output retained.
