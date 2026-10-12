@@ -15,5 +15,5 @@ include(":host:linux")
 include(":adapters:inference", ":adapters:audio", ":adapters:storage")
 include(":runtime:core", ":runtime:events", ":runtime:lifecycle", ":runtime:observer", ":runtime:provider-core")
 include(":sdk:runtime-sdk", ":sdk:provider-sdk", ":sdk:host-sdk")
-include(":libraries:common")
+include(":libraries:common", ":libraries:halo-cognition-language")
 // JSON schemas in protocol/schemas are resources, not a Gradle project.
