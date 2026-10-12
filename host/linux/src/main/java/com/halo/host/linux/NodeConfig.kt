@@ -24,16 +24,22 @@ object NodeConfiguration {
         val home = Path.of(System.getProperty("user.home"))
         val xdg = System.getenv("XDG_CONFIG_HOME")?.let(Path::of) ?: home.resolve(".config")
         val path = System.getenv("HALO_CONFIG_FILE")?.let(Path::of) ?: xdg.resolve("halo-linux/config.yaml")
-        val values: Map<*, *> = if (Files.isRegularFile(path)) {
-            val options = LoaderOptions().apply {
-                codePointLimit = 100_000
-                maxAliasesForCollections = 0
-                nestingDepthLimit = 20
-            }
-            require(Files.size(path) <= 100_000) { "Configuration file too large" }
-            val raw = Yaml(SafeConstructor(options)).load<Any?>(Files.readString(path))
-            (raw as? Map<*, *>) ?: throw IllegalArgumentException("Invalid YAML root: expected an object")
-        } else emptyMap<String, Any>()
+        if (!Files.isRegularFile(path)) return parse("", home, null)
+        require(Files.size(path) <= 100_000) { "Configuration file too large" }
+        return parse(Files.readString(path), home, path.toString())
+    }
+
+    /** Parse with an explicit home for fast, deterministic no-hardware tests. */
+    fun parse(yaml: String, home: Path, source: String? = null): NodeConfig {
+        require(yaml.length <= 100_000) { "Configuration file too large" }
+        val options = LoaderOptions().apply {
+            codePointLimit = 100_000
+            maxAliasesForCollections = 0
+            nestingDepthLimit = 20
+        }
+        val raw = Yaml(SafeConstructor(options)).load<Any?>(yaml)
+        val values: Map<*, *> = if (raw == null) emptyMap<String, Any>()
+            else (raw as? Map<*, *>) ?: throw IllegalArgumentException("Invalid YAML root")
         fun section(name: String): Map<*, *> = (values[name] as? Map<*, *>) ?: emptyMap<String, Any>()
         val node = section("node")
         val inference = section("inference")
@@ -63,7 +69,7 @@ object NodeConfiguration {
             providerModel = model,
             dataDir = configuredPath,
             audioEnabled = enabled,
-            configPath = if (Files.isRegularFile(path)) path.toString() else null,
+            configPath = source,
         )
     }
 }

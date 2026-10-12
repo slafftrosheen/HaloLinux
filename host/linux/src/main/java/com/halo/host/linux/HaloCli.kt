@@ -77,6 +77,25 @@ object HaloCli {
                 val reply = request(JSONObject().put("op", "ask").put("text", question))
                 println(reply.getString("text")); 0
             }
+            "storage" -> {
+                val op = args.getOrNull(1)
+                when (op) {
+                    "check" -> {
+                        println(request(JSONObject().put("op", "storage.check")).toString(2))
+                        0
+                    }
+                    "backup" -> {
+                        val destination = args.getOrNull(2)?.trim()
+                        if (destination.isNullOrEmpty() || args.size != 3) {
+                            throw IllegalArgumentException("Usage: halo-node storage backup /absolute/path/backup.db")
+                        }
+                        println(request(JSONObject().put("op", "storage.backup")
+                            .put("destination", destination)).toString(2))
+                        0
+                    }
+                    else -> throw IllegalArgumentException("Usage: halo-node storage [check|backup <absolute-path>]")
+                }
+            }
             "memory" -> {
                 val op = args.getOrNull(1)
                 val value = args.drop(2).joinToString(" ").trim()
@@ -87,7 +106,7 @@ object HaloCli {
                 println(reply.toString(2)); 0
             }
             else -> {
-                System.err.println("Usage: halo-node [--version|doctor|config show|start|status|ask <text>|memory add <text>|memory search <query>|memory delete <id>]")
+                System.err.println("Usage: halo-node [--version|doctor|config show|start|status|ask <text>|memory add <text>|memory search <query>|memory delete <id>|storage check|storage backup <absolute-path>]")
                 2
             }
         }
@@ -148,6 +167,23 @@ object HaloCli {
                 .put("audio", "NOT_VERIFIED")
                 .put("sync", "DISABLED")
                 .put("node_id", store.getNodeIdentity().nodeId)
+            "storage.check" -> {
+                val report = store.checkDatabase()
+                JSONObject().put("ok", report.integrityOk)
+                    .put("integrity", report.integrityMessage)
+                    .put("schema_version", report.schemaVersion)
+                    .put("memory_count", report.memoryCount)
+                    .put("conversation_count", report.conversationCount)
+                    .put("database_bytes", report.databaseBytes)
+            }
+            "storage.backup" -> {
+                val path = java.nio.file.Path.of(input.getString("destination"))
+                val receipt = store.createBackup(path)
+                JSONObject().put("ok", true)
+                    .put("backup_path", receipt.path)
+                    .put("bytes", receipt.bytes)
+                    .put("contains_private_identity", true)
+            }
             "memory.add" -> {
                 val text = input.getString("text").trim()
                 require(text.isNotBlank() && text.length <= 100_000) { "Invalid memory text" }
