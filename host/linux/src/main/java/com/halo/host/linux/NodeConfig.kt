@@ -43,8 +43,7 @@ object NodeConfiguration {
             }
         }
         val model = (inference["model"] as? String)?.trim()?.takeIf(String::isNotBlank)
-        val configuredPath = (storage["data_dir"] as? String)?.trim()?.takeIf(String::isNotBlank()
-        )?.let { if (it.startsWith("~/")) home.resolve(it.removePrefix("~/")).toString() else it }
+        val configuredPath = (storage["data_dir"] as? String)?.trim()?.takeIf { it.isNotBlank() }?.let { if (it.startsWith("~/")) home.resolve(it.removePrefix("~/")).toString() else it }
         val enabled = audio["enabled"] as? Boolean ?: false
         return NodeConfig(
             displayName = (node["display_name"] ?: node["name"]) as? String ?: "Halo Linux Node",

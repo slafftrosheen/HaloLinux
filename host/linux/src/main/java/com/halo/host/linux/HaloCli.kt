@@ -154,7 +154,7 @@ object HaloCli {
             Runtime.getRuntime().addShutdownHook(shutdown)
             println("Halo node running: ${config.displayName} (local socket: $sock)")
             while (server.isOpen) {
-                val client = try { server.accept() } catch (_: java.nio.channels.AsynchronousCloseException) { break }
+                val client = try { server.accept() } catch (_: java.nio.channels.ClosedChannelException) { break }
                 client.use {
                     val source = Channels.newInputStream(it).bufferedReader()
                     val sink = Channels.newOutputStream(it).bufferedWriter()

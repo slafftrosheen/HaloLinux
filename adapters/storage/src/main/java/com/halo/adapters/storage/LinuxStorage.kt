@@ -54,6 +54,15 @@ class LinuxStorage {
         Files.createDirectories(dataDir)
         Files.createDirectories(configDir)
         Files.createDirectories(cacheDir)
+        // Sensitive notes, credentials and metadata stay private even under umask 022.
+        val ownerOnly = setOf(
+            java.nio.file.attribute.PosixFilePermission.OWNER_READ,
+            java.nio.file.attribute.PosixFilePermission.OWNER_WRITE,
+            java.nio.file.attribute.PosixFilePermission.OWNER_EXECUTE
+        )
+        for (dir in listOf(dataDir, configDir, cacheDir)) {
+            Files.setPosixFilePermissions(dir, ownerOnly)
+        }
         Files.createDirectories(dataDir.resolve("conversations"))
         Files.createDirectories(dataDir.resolve("memories"))
         Files.createDirectories(dataDir.resolve("documents"))
@@ -155,8 +164,12 @@ class LinuxStorage {
             conn.setAutoCommit(false)
             try {
                 conn.prepareStatement("""
-                    INSERT OR REPLACE INTO conversations (id, title, created_at, updated_at, provider_id, model_id, metadata)
+                    INSERT INTO conversations (id, title, created_at, updated_at, provider_id, model_id, metadata)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        title=excluded.title, updated_at=excluded.updated_at,
+                        provider_id=excluded.provider_id, model_id=excluded.model_id,
+                        metadata=excluded.metadata
                 """.trimIndent()).use { stmt ->
                     stmt.setString(1, conversation.id)
                     stmt.setString(2, conversation.title)
@@ -301,8 +314,12 @@ class LinuxStorage {
     suspend fun storeMemory(memory: MemoryRecord) = withContext(Dispatchers.IO) {
         openConnection().use { conn ->
             conn.prepareStatement("""
-                INSERT OR REPLACE INTO memories (id, content, source, scope, confidence, expires_at, created_at, updated_at, metadata)
+                INSERT INTO memories (id, content, source, scope, confidence, expires_at, created_at, updated_at, metadata)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    content=excluded.content, source=excluded.source, scope=excluded.scope,
+                    confidence=excluded.confidence, expires_at=excluded.expires_at,
+                    updated_at=excluded.updated_at, metadata=excluded.metadata
             """.trimIndent()).use { stmt ->
                 stmt.setString(1, memory.id)
                 stmt.setString(2, memory.content)
@@ -331,8 +348,31 @@ class LinuxStorage {
             
             val nodeId = map["node_id"] ?: UUID.randomUUID().toString()
             val displayName = map["display_name"] ?: "Halo Linux Node"
-            val publicKey = map["public_key"] ?: ""
-            val privateKey = map["private_key"] ?: ""
+            var publicKey = map["public_key"].orEmpty()
+            var privateKey = map["private_key"].orEmpty()
+            if (publicKey.isBlank() || privateKey.isBlank()) {
+                val pair = java.security.KeyPairGenerator.getInstance("Ed25519").generateKeyPair()
+                publicKey = java.util.Base64.getEncoder().encodeToString(pair.public.encoded)
+                privateKey = java.util.Base64.getEncoder().encodeToString(pair.private.encoded)
+                conn.autoCommit = false
+                try {
+                    conn.prepareStatement("INSERT OR REPLACE INTO node_identity (key,value,updated_at) VALUES (?,?,?)").use { stmt ->
+                        for ((key, value) in mapOf("public_key" to publicKey, "private_key" to privateKey)) {
+                            stmt.setString(1, key)
+                            stmt.setString(2, value)
+                            stmt.setString(3, Instant.now().toString())
+                            stmt.addBatch()
+                        }
+                        stmt.executeBatch()
+                    }
+                    conn.commit()
+                } catch (e: Exception) {
+                    conn.rollback()
+                    throw e
+                } finally {
+                    conn.autoCommit = true
+                }
+            }
             
             // Persist if new
             if (!map.containsKey("node_id")) {
