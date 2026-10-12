@@ -188,6 +188,20 @@ internal object CanonicalAgentJson {
             is AgentStep.ContinuationPrepared ->
                 j.put("turnId", step.turnId.value).put("messageCount", step.messageCount)
                     .put("exposedToolIds", putStrings(step.exposedToolIds))
+            is AgentStep.RunGuardTriggered ->
+                j.put("reason", step.reason.name).put("round", step.round)
+                    .put("toolId", step.toolId).put("evidenceHash", step.evidenceHash)
+                    .put("elapsedMs", step.elapsedMs).put("summary", step.summary)
+            is AgentStep.ExternalConditionRegistered ->
+                j.put("watchId", step.watchId).put("conditionType", step.conditionType)
+                    .put("targetId", step.targetId).put("presentationText", step.presentationText)
+            is AgentStep.ExternalConditionSatisfied ->
+                j.put("watchId", step.watchId).put("conditionType", step.conditionType)
+                    .put("targetId", step.targetId)
+            is AgentStep.ExternalConditionExpired ->
+                j.put("watchId", step.watchId).put("conditionType", step.conditionType)
+            is AgentStep.ExternalConditionCancelled ->
+                j.put("watchId", step.watchId).put("reason", step.reason)
             is AgentStep.InputRequested -> {
                 j.put("requestId", step.requestId.value).put("input", encodeInput(step.input))
             }
@@ -297,6 +311,20 @@ internal object CanonicalAgentJson {
             "ContinuationPrepared" -> AgentStep.ContinuationPrepared(id, runId, created,
                 ProviderTurnId(j.getString("turnId")), j.getInt("messageCount"),
                 j.arrayStrings("exposedToolIds"))
+            "RunGuardTriggered" -> AgentStep.RunGuardTriggered(id, runId, created,
+                RunGuardReason.valueOf(j.getString("reason")), j.getInt("round"),
+                j.optionalString("toolId"), j.optionalString("evidenceHash"),
+                j.getLong("elapsedMs"), j.getString("summary"))
+            "ExternalConditionRegistered" -> AgentStep.ExternalConditionRegistered(
+                id, runId, created, j.getString("watchId"), j.getString("conditionType"),
+                j.optionalString("targetId"), j.optionalString("presentationText"))
+            "ExternalConditionSatisfied" -> AgentStep.ExternalConditionSatisfied(
+                id, runId, created, j.getString("watchId"), j.getString("conditionType"),
+                j.optionalString("targetId"))
+            "ExternalConditionExpired" -> AgentStep.ExternalConditionExpired(
+                id, runId, created, j.getString("watchId"), j.getString("conditionType"))
+            "ExternalConditionCancelled" -> AgentStep.ExternalConditionCancelled(
+                id, runId, created, j.getString("watchId"), j.optionalString("reason"))
             "InputRequested" -> AgentStep.InputRequested(
                 id, runId, created, AgentInputRequestId(j.getString("requestId")),
                 decodeInput(j.getJSONObject("input"))
