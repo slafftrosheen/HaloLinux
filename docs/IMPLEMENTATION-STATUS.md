@@ -269,3 +269,20 @@ These source changes remain pending Gradle/JUnit execution.
   SQLite, and the returned JSON is sized before sending.
 - No model automatically receives personal memory from this operation.
 - Kotlin/JUnit tests remain source-only pending an executable JVM build.
+
+## HALO-LINUX-041–044 safety pass
+
+- **041:** Private SQLite, XDG data/cache directories, and managed child
+  paths are rejected if relative or already symlinked. Validation occurs
+  before creating files or changing directory permissions.
+- **042:** Client requests are size-checked before transmission. Incoming
+  UTF-8 frames use strict decoding; malformed bytes are rejected rather
+  than silently replaced.
+- **043:** Local socket shutdown closes accepted and queued sockets, interrupts
+  client workers and waits a bounded 10 seconds for worker termination.
+- **044:** Write-producing operations have a 5-second admission bound. If
+  another write or long model generation owns the mutation gate, callers
+  receive `NODE_BUSY`, and their queued write does not run later.
+  Once admitted, a mutation is **not** cancelled by the admission timeout.
+
+Source and tests committed; JVM and ARM64 execution are still pending.

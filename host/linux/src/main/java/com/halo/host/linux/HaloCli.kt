@@ -29,15 +29,13 @@ import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import okhttp3.OkHttpClient
 import org.json.JSONArray
 import org.json.JSONObject
 
 /** Local-only CLI and daemon control interface. No LAN listener is created. */
 object HaloCli {
-    private val mutationGate = Mutex()
+    private val mutationGate = LinuxMutationAdmission()
     private fun socketPath(): Path {
         val home = Path.of(System.getProperty("user.home"))
         val runtime = System.getenv("XDG_RUNTIME_DIR")?.let(Path::of)
@@ -260,7 +258,10 @@ object HaloCli {
             "agent.backup", "node.backup"
         )
         return if (op in writeOperations) {
-            mutationGate.withLock { dispatch(op, store, config, runtime, provider, cognition, recovery, input) }
+            mutationGate.execute {
+                dispatch(op, store, config, runtime, provider, cognition, recovery, input)
+            } ?: JSONObject().put("ok", false).put("error_code", "NODE_BUSY")
+                .put("error", "Another local write or model request is running. Try later.")
         } else {
             dispatch(op, store, config, runtime, provider, cognition, recovery, input)
         }
