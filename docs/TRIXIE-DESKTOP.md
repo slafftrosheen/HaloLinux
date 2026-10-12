@@ -1,0 +1,118 @@
+# HaloLinux on Raspberry Pi OS Trixie (64-bit) with Desktop
+
+Target: **Raspberry Pi 5, 8 GB, Raspberry Pi OS Trixie 64-bit with Desktop**.
+
+> Raspberry Pi 5 64-bit OS is **ARM64/AArch64** (`uname -m`: `aarch64`). 
+> It is not x86-64 ("x64" on Intel/AMD PCs). The JVM bytecode is portable,
+> but SQLite JNI and local model binaries require ARM64 support.
+
+This document is a development-first setup guide. Hardware has **not yet been tested**.
+
+## Stage 1 — interactive desktop development
+
+Open the desktop Terminal and check:
+
+```bash
+uname -m
+cat /etc/os-release
+java -version
+free -h
+lsblk -o NAME,TYPE,SIZE,FSTYPE,MOUNTPOINTS
+```
+
+Install Java 21/JDK and Git through the distribution's package manager if missing;
+do not add external repositories merely for newer JDK builds.
+
+```bash
+sudo apt update
+sudo apt install -y openjdk-21-jdk git
+```
+
+Clone from **main**, not GitHub's current default branch `master`:
+
+```bash
+git clone --branch main https://github.com/slafftrosheen/HaloLinux.git
+cd HaloLinux
+./scripts/preflight.sh
+./gradlew clean build --no-daemon
+./scripts/smoke-test.sh
+```
+
+The build is a **gate**. Stop and save the first complete compiler error if it fails;
+do not install an unverified JAR.
+
+After a green build and smoke test:
+
+```bash
+./scripts/setup-trixie-desktop.sh
+./scripts/install.sh
+~/.local/bin/halo-node --version
+~/.local/bin/halo-node doctor
+```
+
+Edit `~/.config/halo-linux/config.yaml` in your preferred GUI editor.
+The default example names a model that must be replaced with an actually installed one.
+The model provider is entirely optional for local memory, storage checks and backups.
+
+### Running during GUI development
+
+Use a Terminal tab for the daemon:
+
+```bash
+~/.local/bin/halo-node start
+```
+
+From a second Terminal tab:
+
+```bash
+~/.local/bin/halo-node status
+~/.local/bin/halo-node memory add "Test from Pi desktop"
+~/.local/bin/halo-node memory search "desktop"
+~/.local/bin/halo-node storage check
+```
+
+After validating the daemon, use a **user systemd service**:
+
+```bash
+systemctl --user start halo-node
+systemctl --user status halo-node --no-pager
+journalctl --user -u halo-node -f
+```
+
+Do not launch a second manual daemon while the service is running.
+
+## Audio testing during desktop development
+
+The desktop user session is convenient because PipeWire/WirePlumber may already
+provide working devices/routes. Record the actual hardware/driver identity first:
+
+```bash
+cat /proc/asound/cards
+aplay -l
+arecord -l
+wpctl status
+```
+
+The HiFiBerry DAC+ ADC Pro model/overlay must be verified from your actual board.
+Do not assume card 0 or a fixed device number.
+Audio enumeration does **not** mean the Halo STT/audio pipeline is implemented.
+
+## Model and memory expectations on Pi 5
+
+Use an explicit, small local model first (e.g. 0.5–1.5B quantized) to establish
+working transport and memory/power use. A GUI, Java daemon, database, audio and
+large inference engine all consume the same 8 GB RAM. Monitor:
+
+```bash
+free -h
+top
+vcgencmd measure_temp
+vcgencmd get_throttled
+```
+
+Never claim an NPU/GPU delegate is present without a supported backend and measured test.
+
+## Stage 2 — convert this exact installation to headless
+
+See [Desktop-to-headless migration](TRIXIE-HEADLESS-MIGRATION.md).
+The principle is to change boot/session management, not the Halo storage schema.

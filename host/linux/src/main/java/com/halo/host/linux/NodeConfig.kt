@@ -40,7 +40,11 @@ object NodeConfiguration {
         val raw = Yaml(SafeConstructor(options)).load<Any?>(yaml)
         val values: Map<*, *> = if (raw == null) emptyMap<String, Any>()
             else (raw as? Map<*, *>) ?: throw IllegalArgumentException("Invalid YAML root")
-        fun section(name: String): Map<*, *> = (values[name] as? Map<*, *>) ?: emptyMap<String, Any>()
+        fun section(name: String): Map<*, *> = when (val entry = values[name]) {
+            null -> emptyMap<String, Any>()
+            is Map<*, *> -> entry
+            else -> throw IllegalArgumentException("Invalid configuration section: $name")
+        }
         val node = section("node")
         val inference = section("inference")
         val storage = section("storage")
