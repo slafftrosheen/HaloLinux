@@ -25,7 +25,13 @@ object NodeConfiguration {
         val xdg = System.getenv("XDG_CONFIG_HOME")?.let(Path::of) ?: home.resolve(".config")
         val path = System.getenv("HALO_CONFIG_FILE")?.let(Path::of) ?: xdg.resolve("halo-linux/config.yaml")
         val values: Map<*, *> = if (Files.isRegularFile(path)) {
-            val raw = Yaml(SafeConstructor(LoaderOptions())).load<Any?>(Files.readString(path))
+            val options = LoaderOptions().apply {
+                codePointLimit = 100_000
+                maxAliasesForCollections = 0
+                nestingDepthLimit = 20
+            }
+            require(Files.size(path) <= 100_000) { "Configuration file too large" }
+            val raw = Yaml(SafeConstructor(options)).load<Any?>(Files.readString(path))
             (raw as? Map<*, *>) ?: throw IllegalArgumentException("Invalid YAML root: expected an object")
         } else emptyMap<String, Any>()
         fun section(name: String): Map<*, *> = (values[name] as? Map<*, *>) ?: emptyMap<String, Any>()

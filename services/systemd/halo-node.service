@@ -17,6 +17,8 @@ NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=full
 UMask=0077
+RuntimeDirectory=halo-linux
+RuntimeDirectoryMode=0700
 StandardOutput=journal
 StandardError=journal
 

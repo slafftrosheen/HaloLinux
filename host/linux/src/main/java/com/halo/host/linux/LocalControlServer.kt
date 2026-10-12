@@ -92,7 +92,7 @@ class LocalControlServer(
         )
         try {
             client.use {
-                val input = Channels.newInputStream(it)
+                val input = Channels.newInputStream(it).buffered(8192)
                 val line = readFrame(input)
                 val response = try {
                     handler(JSONObject(line))
@@ -153,7 +153,7 @@ object LocalControlClient {
                 Channels.newOutputStream(channel).write(
                     (input.toString() + "\n").toByteArray(Charsets.UTF_8)
                 )
-                val response = LocalControlServer.readFrame(Channels.newInputStream(channel))
+                val response = LocalControlServer.readFrame(Channels.newInputStream(channel).buffered(8192))
                 val result = JSONObject(response)
                 if (!result.optBoolean("ok")) {
                     throw IllegalStateException(result.optString("error", "Request rejected"))
