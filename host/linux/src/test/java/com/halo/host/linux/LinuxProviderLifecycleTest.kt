@@ -119,6 +119,8 @@ class LinuxProviderLifecycleTest {
             assertEquals(com.halo.sdk.provider.AiErrorType.RATE_LIMITED,
                 (busy.exceptionOrNull() as com.halo.sdk.provider.AiProviderException).type)
             assertEquals(1, calls.get())
+            assertTrue(lifecycle.snapshot().inFlight)
+            assertEquals(LinuxProviderPhase.INFERENCING, lifecycle.snapshot().phase)
         } finally {
             release.complete(Unit)
             withTimeout(1000) { first.await() }

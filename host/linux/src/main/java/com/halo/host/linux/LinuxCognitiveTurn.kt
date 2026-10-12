@@ -94,15 +94,15 @@ class LinuxCognitiveTurn(
             ))
             mainCommitted = true
             var journalState = if (agentRunId == null) "NOT_LINKED" else "COMMITTED"
-            try {
-                recoverySupport().commitTextDelivery(agentRunId, newConversationId)
-            } catch (cancel: CancellationException) {
-                throw cancel
-            } catch (_: Exception) {
-                // Main SQLite is authoritative for the delivered text. Returning
-                // an error here would encourage duplicate user retries.
-                // The canonical run remains for explicit recovery inspection.
-                journalState = "NEEDS_RECONCILIATION"
+            // Once the main conversation is committed, finalization must not
+            // be abandoned halfway by a disconnecting client. Never re-run
+            // the model just because the second DB has an incomplete journal.
+            withContext(NonCancellable) {
+                try {
+                    recoverySupport().commitTextDelivery(agentRunId, newConversationId)
+                } catch (_: Exception) {
+                    journalState = "NEEDS_RECONCILIATION"
+                }
             }
             runtime.publish(InferenceObserved(
                 requestId = interactionId,

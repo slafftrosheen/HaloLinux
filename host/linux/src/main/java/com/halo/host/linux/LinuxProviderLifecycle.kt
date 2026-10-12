@@ -159,7 +159,7 @@ class LinuxProviderLifecycle(
         } catch (cancel: CancellationException) {
             synchronized(lock) {
                 if (!closed) {
-                    phase = LinuxProviderPhase.DEGRADED
+                    if (!inFlight) phase = LinuxProviderPhase.DEGRADED
                     lastFailureType = "CANCELLED_OR_TIMEOUT"
                 }
             }
@@ -167,7 +167,7 @@ class LinuxProviderLifecycle(
         } catch (error: Exception) {
             synchronized(lock) {
                 if (!closed) {
-                    phase = LinuxProviderPhase.DEGRADED
+                    if (!inFlight) phase = LinuxProviderPhase.DEGRADED
                     lastFailureType = (error as? AiProviderException)?.type?.name ?: "GENERATION_FAILED"
                 }
             }
