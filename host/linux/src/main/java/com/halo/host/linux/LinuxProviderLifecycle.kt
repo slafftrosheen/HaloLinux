@@ -54,6 +54,7 @@ class LinuxProviderLifecycle(
         LinuxProviderPhase.DISABLED else LinuxProviderPhase.CONFIGURED
     private var attempts = 0L
     private var successes = 0L
+    private var closed = false
     private var inFlight = false
     private var lastFailureType: String? = null
     private var lastLatencyMs: Long? = null
@@ -67,26 +68,37 @@ class LinuxProviderLifecycle(
 
     suspend fun checkConnectivity(): Boolean {
         val target = provider ?: return false
-        synchronized(lock) {
-            check(phase != LinuxProviderPhase.STOPPED) { "Provider is stopped" }
-            phase = LinuxProviderPhase.CHECKING
-        }
         return try {
-            val result = withTimeout(timeoutMs.coerceAtMost(15_000)) {
-                inferencePermit.withPermit { target.testConnection() }
+            withTimeout(timeoutMs.coerceAtMost(15_000)) {
+                inferencePermit.withPermit {
+                    synchronized(lock) {
+                        check(!closed) { "Provider is stopped" }
+                        phase = LinuxProviderPhase.CHECKING
+                    }
+                    val result = target.testConnection()
+                    synchronized(lock) {
+                        if (!closed) {
+                            phase = if (result) LinuxProviderPhase.AVAILABLE else LinuxProviderPhase.DEGRADED
+                            lastFailureType = if (result) null else "CONNECTION_PROBE_FAILED"
+                        }
+                    }
+                    result && synchronized(lock) { !closed }
+                }
             }
-            synchronized(lock) {
-                phase = if (result) LinuxProviderPhase.AVAILABLE else LinuxProviderPhase.DEGRADED
-                lastFailureType = if (result) null else "CONNECTION_PROBE_FAILED"
-            }
-            result
         } catch (cancel: CancellationException) {
-            synchronized(lock) { phase = LinuxProviderPhase.DEGRADED; lastFailureType = "CANCELLED" }
+            synchronized(lock) {
+                if (!closed) {
+                    phase = LinuxProviderPhase.DEGRADED
+                    lastFailureType = "PROBE_CANCELLED"
+                }
+            }
             throw cancel
         } catch (_: Exception) {
             synchronized(lock) {
-                phase = LinuxProviderPhase.DEGRADED
-                lastFailureType = "CONNECTION_PROBE_FAILED"
+                if (!closed) {
+                    phase = LinuxProviderPhase.DEGRADED
+                    lastFailureType = "CONNECTION_PROBE_FAILED"
+                }
             }
             false
         }
@@ -99,7 +111,7 @@ class LinuxProviderLifecycle(
         val model = modelId?.takeIf(String::isNotBlank) ?: throw AiProviderException(
             AiErrorType.MODEL_NOT_SELECTED, "No model configured")
         synchronized(lock) {
-            check(phase != LinuxProviderPhase.STOPPED) { "Provider is stopped" }
+            check(!closed) { "Provider is stopped" }
             attempts++
         }
         val start = monotonicNs()
@@ -129,6 +141,7 @@ class LinuxProviderLifecycle(
             if (result.text.isBlank()) throw AiProviderException(
                 AiErrorType.EMPTY_RESPONSE, "The provider returned no text")
             synchronized(lock) {
+                if (closed) throw CancellationException("Provider was stopped during inference")
                 phase = LinuxProviderPhase.AVAILABLE
                 successes++
                 lastFailureType = null
@@ -137,22 +150,32 @@ class LinuxProviderLifecycle(
             return result
         } catch (cancel: CancellationException) {
             synchronized(lock) {
-                phase = LinuxProviderPhase.DEGRADED
-                lastFailureType = "CANCELLED_OR_TIMEOUT"
+                if (!closed) {
+                    phase = LinuxProviderPhase.DEGRADED
+                    lastFailureType = "CANCELLED_OR_TIMEOUT"
+                }
             }
             throw cancel
         } catch (error: Exception) {
             synchronized(lock) {
-                phase = LinuxProviderPhase.DEGRADED
-                lastFailureType = (error as? AiProviderException)?.type?.name ?: "GENERATION_FAILED"
+                if (!closed) {
+                    phase = LinuxProviderPhase.DEGRADED
+                    lastFailureType = (error as? AiProviderException)?.type?.name ?: "GENERATION_FAILED"
+                }
             }
             throw error
         }
     }
 
     override fun close() {
-        synchronized(lock) { phase = LinuxProviderPhase.STOPPED }
-        onClose()
+        val firstClose = synchronized(lock) {
+            if (closed) false else {
+                closed = true
+                phase = LinuxProviderPhase.STOPPED
+                true
+            }
+        }
+        if (firstClose) onClose()
     }
 
     companion object {
@@ -187,6 +210,7 @@ class LinuxProviderLifecycle(
             )
             return LinuxProviderLifecycle(provider, config.providerModel,
                 onClose = {
+                    client.dispatcher.cancelAll()
                     client.dispatcher.executorService.shutdown()
                     client.connectionPool.evictAll()
                     client.cache?.close()

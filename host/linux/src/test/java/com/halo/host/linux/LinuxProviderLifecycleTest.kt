@@ -7,6 +7,10 @@ import com.halo.sdk.provider.AiRequest
 import com.halo.sdk.provider.AiResponse
 import com.halo.sdk.provider.ToolCall
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.async
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.withTimeout
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 
@@ -63,4 +67,30 @@ class LinuxProviderLifecycleTest {
         assertEquals(0L, lifecycle.snapshot().attempts)
         lifecycle.close()
     }
+    @Test fun shutdownDuringInferenceNeverRestoresAvailableState() = runBlocking {
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val blocking = object : AiInferenceProvider by fixture() {
+            override suspend fun generate(request: AiRequest, context: AiContext): AiResponse {
+                entered.complete(Unit)
+                release.await()
+                return AiResponse(text = "late answer", providerId = "fixture", modelId = request.modelId)
+            }
+        }
+        val lifecycle = LinuxProviderLifecycle(blocking, "fixture-model", timeoutMs = 3000)
+        val job = async(Dispatchers.Default) {
+            runCatching { lifecycle.generate("Wait until shutdown", "inflight") }
+        }
+        withTimeout(1000) { entered.await() }
+        assertTrue(lifecycle.snapshot().inFlight)
+        lifecycle.close()
+        release.complete(Unit)
+        val outcome = withTimeout(1000) { job.await() }
+        assertTrue(outcome.isFailure)
+        assertEquals(LinuxProviderPhase.STOPPED, lifecycle.snapshot().phase)
+        assertEquals(0L, lifecycle.snapshot().successes)
+        assertFalse(lifecycle.snapshot().inFlight)
+        lifecycle.close() // idempotent
+    }
+
 }
