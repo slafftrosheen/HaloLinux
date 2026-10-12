@@ -57,4 +57,20 @@ class NodeConfigTest {
             NodeConfiguration.parse("node: [invalid map]", home)
         }
     }
+    @Test fun exampleConfigIsModelFreeByDefault() {
+        val source = """
+            node:
+              display_name: "Pi Desktop Node"
+            inference:
+              # endpoint: "http://127.0.0.1:11434/v1"
+              # model: "replace-with-actually-installed-model"
+            audio:
+              enabled: false
+        """.trimIndent()
+        val config = NodeConfiguration.parse(source, home)
+        assertFalse(config.providerConfigured)
+        assertNull(config.providerEndpoint)
+        assertNull(config.providerModel)
+    }
+
 }

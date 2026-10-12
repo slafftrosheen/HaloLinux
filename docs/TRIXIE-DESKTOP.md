@@ -51,8 +51,10 @@ After a green build and smoke test:
 ```
 
 Edit `~/.config/halo-linux/config.yaml` in your preferred GUI editor.
-The default example names a model that must be replaced with an actually installed one.
-The model provider is entirely optional for local memory, storage checks and backups.
+The example configuration now starts in **memory-only mode**. An inference
+endpoint and a real installed model must be explicitly enabled before `ask`
+will work. Storage, offline search, diagnostics and backups remain available
+without an inference provider.
 
 ### Running during GUI development
 

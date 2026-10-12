@@ -1,15 +1,16 @@
-# Copy to ~/.config/halo-linux/config.yaml
+# Initial Trixie Desktop configuration: memory-only, no provider required.
+# Copy to ~/.config/halo-linux/config.yaml (mode 0600).
 node:
   display_name: "My Halo Node"
 
-# Set HALO_INFERENCE_API_KEY in the environment for authenticated providers.
-# Do not place API keys directly in this YAML file.
+# Inference is OPT-IN. Remove the # from both lines after installing
+# an actual local model/provider, and verify with 'halo-node provider check'.
+# Secrets must be supplied through HALO_INFERENCE_API_KEY, not the YAML file.
 inference:
-  endpoint: "http://127.0.0.1:11434/v1"
-  model: "change-to-your-installed-model"
+  # endpoint: "http://127.0.0.1:11434/v1"
+  # model: "replace-with-actually-installed-model"
 
 storage:
-  # Optionally override XDG data home:
   # data_dir: "~/halo-data"
 
 audio:
