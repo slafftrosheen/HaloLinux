@@ -100,4 +100,28 @@ class LocalControlServerTest {
         assertFalse(response.toString().contains("/home/example"))
     }
 
+    @Test fun oversizedResponseReturnsBoundedProtocolError() {
+        val path = tmp.resolve("oversized.sock")
+        val server = LocalControlServer(path) {
+            JSONObject().put("ok", true)
+                .put("content", "large-reply-".repeat(LocalControlServer.MAX_REQUEST_BYTES / 8))
+        }
+        val runner = Thread { runCatching { server.serve() } }
+        runner.start()
+        try {
+            repeat(100) {
+                if (!Files.exists(path)) Thread.sleep(10)
+            }
+            assertTrue(Files.exists(path))
+            val failure = assertThrows(LocalControlFailure::class.java) {
+                LocalControlClient.exchange(path, JSONObject().put("op", "status"))
+            }
+            assertEquals("RESPONSE_TOO_LARGE", failure.code)
+        } finally {
+            server.close()
+            runner.join(2000)
+        }
+        assertFalse(runner.isAlive)
+    }
+
 }
