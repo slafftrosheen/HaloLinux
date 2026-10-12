@@ -136,4 +136,35 @@ class LinuxCognitiveTurnTest {
         }
     }
 
+    @Test fun oversizedJsonAnswerCannotBecomeDeliveredConversation() = runBlocking {
+        val store = LinuxStorage()
+        store.initialize(LinuxStorageConfig(
+            dataDir=folder.resolve("limit-data").toString(),
+            configDir=folder.resolve("limit-config").toString(),
+            cacheDir=folder.resolve("limit-cache").toString()
+        ))
+        val runtime = LinuxRuntimeBridge(store)
+        val model = object : com.halo.sdk.provider.AiInferenceProvider by FixtureInferenceProvider() {
+            override suspend fun generate(
+                request: com.halo.sdk.provider.AiRequest,
+                context: com.halo.sdk.provider.AiContext,
+            ) = com.halo.sdk.provider.AiResponse(
+                text = "large-answer-".repeat(12_000),
+                providerId = "fixture", modelId = request.modelId
+            )
+        }
+        val provider = LinuxProviderLifecycle(model, "fixture-model")
+        try {
+            runtime.start()
+            assertThrows(IllegalArgumentException::class.java) {
+                runBlocking { LinuxCognitiveTurn(provider, store, runtime).ask("small request") }
+            }
+            assertEquals(0L, store.checkDatabase().conversationCount)
+        } finally {
+            provider.close()
+            runtime.stop()
+            store.close()
+        }
+    }
+
 }
