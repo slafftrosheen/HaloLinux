@@ -173,3 +173,46 @@ experimental; no user action/tool execution or automatic recovery enabled.
 Before Pi deployment, collect compiler output and actual test logs. Do not
 enable the optional canonical cognition integration by default until its
 Gradle API/ABI compatibility is demonstrated against the pinned Halo worktree.
+
+## HALO-LINUX-027–030: build-readiness corrections
+
+Changes committed to `main`:
+- **027A:** Declared recovery adapter state before capturing it in the cognition
+  callback, correcting Kotlin's local variable declaration order at daemon startup.
+- **027B/C:** Enforced a bounded, valid JSON reply on the Unix socket, with a
+  regression fixture for oversized responses.
+- **028A/B:** Completion events and secondary journal finalization no longer
+  falsify a committed conversation when a client or observer fails.
+- **029:** Corrected invalid Kotlin newline/carriage-return character literal
+  escaping in the optional canonical store and matching text-input fixture.
+- **030A/B:** Enforced an encoded JSON reply-size budget before committing
+  model output as delivered. Large reply test ensures no conversation commit.
+
+### Available verification evidence
+
+- JDK 21 and a local Kotlin CLI are present in the development environment.
+- An isolated Kotlin character-literal syntax smoke check passed.
+- An isolated SQLite check confirmed `VACUUM INTO` supports a pre-created empty
+  destination file on the available SQLite installation.
+- Network DNS access to GitHub and Gradle dependency resolution are unavailable
+  in the local execution container. Consequently, **no repo Gradle build, unit
+  suite, shadow JAR, ARM64 native SQLite or Pi 5 execution has passed yet**.
+- GitHub commits are verified independently; this is not build verification.
+
+### Mandatory next execution gate
+
+On a connected Linux host with Java 21:
+
+```bash
+git clone --branch main https://github.com/slafftrosheen/HaloLinux.git
+cd HaloLinux
+python3 scripts/check-module-graph.py
+python3 scripts/check-snapshot-verifier.py
+./gradlew clean build --no-daemon --stacktrace
+./scripts/smoke-test.sh
+```
+
+After the standalone build is green, use a detached pinned Halo worktree
+to run `./scripts/verify-canonical-cognition.sh /path/to/Halo-worktree`.
+Do **not** deploy the experimental agent variant, enable tool execution,
+or assume inference readiness based only on committed source.
