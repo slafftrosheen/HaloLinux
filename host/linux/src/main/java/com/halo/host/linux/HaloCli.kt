@@ -151,8 +151,9 @@ object HaloCli {
         val runtime = LinuxRuntimeBridge(storage)
         val provider = LinuxProviderLifecycle.create(config)
         val cognition = LinuxCognitiveTurn(provider, storage, runtime)
+        var recovery: LinuxRecoverySupport = DisabledRecoverySupport
         val server = LocalControlServer(socketPath()) { input ->
-            runBlocking { handle(storage, config, runtime, provider, cognition, input) }
+            runBlocking { handle(storage, config, runtime, provider, cognition, recovery, input) }
         }
         val shutdown = Thread { server.close() }
         Runtime.getRuntime().addShutdownHook(shutdown)
@@ -164,6 +165,11 @@ object HaloCli {
                 storage.initialize(LinuxStorageConfig(dataDir = config.dataDir))
                 storage.getNodeIdentity()
                 storage.reconcileInterruptedTurns()
+                recovery = LinuxRecoverySupportFactory.open(
+                    java.nio.file.Path.of(storage.getDataDirectory())
+                )
+                // Validate persisted agent journal schema before reporting READY.
+                recovery.inspect()
                 runtime.start()
             }
             println("Halo node runtime initialized (local socket only; no LAN listener)")
@@ -172,14 +178,16 @@ object HaloCli {
             server.close()
             runBlocking {
                 try { runtime.stop() } finally {
-                    try { provider.close() } finally { storage.close() }
+                    try { provider.close() } finally {
+                        try { recovery.close() } finally { storage.close() }
+                    }
                 }
             }
             runCatching { Runtime.getRuntime().removeShutdownHook(shutdown) }
         }
     }
 
-    private suspend fun handle(store: LinuxStorage, config: NodeConfig, runtime: LinuxRuntimeBridge, provider: LinuxProviderLifecycle, cognition: LinuxCognitiveTurn, input: JSONObject): JSONObject {
+    private suspend fun handle(store: LinuxStorage, config: NodeConfig, runtime: LinuxRuntimeBridge, provider: LinuxProviderLifecycle, cognition: LinuxCognitiveTurn, recovery: LinuxRecoverySupport, input: JSONObject): JSONObject {
         val protocolVersion = input.optInt("protocol_version", -1)
         if (protocolVersion != 1) {
             return JSONObject().put("ok", false)
@@ -202,6 +210,7 @@ object HaloCli {
                 })
                 .put("storage", "READY")
                 .put("interrupted_text_turns", runtime.query(CountInterruptedTextTurns))
+                .put("canonical_agent_recovery", recovery.inspect())
                 .put("inference_configured", config.providerConfigured)
                 .put("provider", provider.snapshot().let { snapshot ->
                     JSONObject().put("phase", snapshot.phase.name)

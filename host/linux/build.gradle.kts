@@ -17,6 +17,9 @@ dependencies {
     implementation(project(":adapters:inference"))
     implementation(project(":adapters:audio"))
     implementation(project(":adapters:storage"))
+    if (providers.gradleProperty("haloCanonicalCognition").orNull == "true") {
+        implementation(project(":adapters:agent-store"))
+    }
     implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
@@ -41,5 +44,11 @@ tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJ
     archiveClassifier.set("")
     manifest {
         attributes["Main-Class"] = "com.halo.host.linux.HaloNodeApplicationKt"
+    }
+}
+
+if (providers.gradleProperty("haloCanonicalCognition").orNull == "true") {
+    kotlin.sourceSets.named("main") {
+        kotlin.srcDir("src/canonical/java")
     }
 }
