@@ -75,6 +75,7 @@ class LinuxRuntimeBridge {
     }
 
     suspend fun publish(event: com.halo.sdk.runtime.HaloEvent) = events.publish(event)
+    fun observeEvents(): Flow<com.halo.sdk.runtime.HaloEvent> = events.events()
 
     fun registeredResources(): ResourceLeaseManager = resources
 }

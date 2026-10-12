@@ -67,3 +67,13 @@ an interrupted turn.
 REASONING checkpoint to COMMITTED and inserts user/assistant messages in the
 **same SQLite transaction**. A duplicate commit attempt does not rewrite the
 original answer. Tests cover a real SQLite primary-key violation and rollback.
+
+## HALO-LINUX-014 — canonical cognitive event compatibility
+
+The Linux turn now emits the existing portable runtime-sdk events
+`CognitiveRequestStarted`, `CognitiveReasoningStarted`, and
+`InferenceObserved` along with the minimal Linux turn stages. These canonical
+events contain stable IDs, provider/model metadata and outcomes but no prompt
+or response payloads. A fixture regression test asserts both order and lack
+of private request text in emitted events. Linux continues to forbid tools and
+unauthorized replay.

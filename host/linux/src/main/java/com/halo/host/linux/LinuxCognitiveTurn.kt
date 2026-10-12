@@ -4,6 +4,9 @@ import com.halo.adapters.storage.ConversationRecord
 import com.halo.adapters.storage.LinuxStorage
 import com.halo.adapters.storage.MessageRecord
 import com.halo.sdk.runtime.HaloEvent
+import com.halo.sdk.runtime.CognitiveRequestStarted
+import com.halo.sdk.runtime.CognitiveReasoningStarted
+import com.halo.sdk.runtime.InferenceObserved
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.TimeUnit
@@ -46,9 +49,15 @@ class LinuxCognitiveTurn(
         val interactionId = UUID.randomUUID().toString()
         val start = clockNs()
         storage.beginTurn(interactionId)
+        runtime.publish(CognitiveRequestStarted(requestId = interactionId, interactionId = interactionId))
         runtime.publish(LinuxTurnEvent(interactionId = interactionId, stage = LinuxTurnStage.ACCEPTED))
         try {
             storage.markTurn(interactionId, "REASONING")
+            val target = provider.snapshot()
+            runtime.publish(CognitiveReasoningStarted(
+                requestId = interactionId, providerId = target.providerId ?: "unconfigured",
+                modelId = target.modelId, interactionId = interactionId
+            ))
             runtime.publish(LinuxTurnEvent(interactionId = interactionId, stage = LinuxTurnStage.REASONING))
             val response = provider.generate(text, interactionId)
             val elapsed = TimeUnit.NANOSECONDS.toMillis(clockNs() - start)
@@ -70,13 +79,34 @@ class LinuxCognitiveTurn(
                         Instant.now(), "{}")
                 )
             ))
+            runtime.publish(InferenceObserved(
+                requestId = interactionId,
+                providerId = response.providerId,
+                requestedModelId = provider.modelId,
+                resolvedModelId = response.modelId,
+                success = true,
+            ))
             runtime.publish(LinuxTurnEvent(interactionId = interactionId, stage = LinuxTurnStage.COMMITTED))
             return LinuxTextTurnResult(interactionId, conversationId, response.text,
                 response.providerId, response.modelId, elapsed)
         } catch (cancel: CancellationException) {
             withContext(NonCancellable) {
                 runCatching { storage.markTurn(interactionId, "FAILED", failureType = "CANCELLED") }
-                runtime.publish(LinuxTurnEvent(interactionId = interactionId, stage = LinuxTurnStage.FAILED))
+                runtime.publish(InferenceObserved(
+                    requestId = interactionId,
+                    providerId = provider.snapshot().providerId ?: "unconfigured",
+                    requestedModelId = provider.modelId,
+                    resolvedModelId = null,
+                    success = false,
+                ))
+                runtime.publish(InferenceObserved(
+                requestId = interactionId,
+                providerId = provider.snapshot().providerId ?: "unconfigured",
+                requestedModelId = provider.modelId,
+                resolvedModelId = null,
+                success = false,
+            ))
+            runtime.publish(LinuxTurnEvent(interactionId = interactionId, stage = LinuxTurnStage.FAILED))
             }
             throw cancel
         } catch (error: Exception) {
