@@ -93,6 +93,14 @@ class SqliteAgentRunStore(
                         ON agent_steps(run_id, journal_key)
                         WHERE journal_key IS NOT NULL
                     """.trimIndent())
+                    // A repeated dispatch/claim idempotency key must never
+                    // be admitted as a second external execution claim.
+                    stmt.execute("""
+                        CREATE UNIQUE INDEX IF NOT EXISTS agent_execution_claim_key_unique
+                        ON agent_steps(json_extract(payload_json,'$.idempotencyKey'))
+                        WHERE type IN ('ToolDispatched','ToolExecutionClaimed')
+                          AND json_extract(payload_json,'$.idempotencyKey') IS NOT NULL
+                    """.trimIndent())
                     stmt.execute("""
                         CREATE UNIQUE INDEX IF NOT EXISTS agent_recovery_claim_unique
                         ON agent_steps(run_id, recovery_fingerprint)
@@ -268,7 +276,8 @@ class SqliteAgentRunStore(
             is AgentStep.ResponseCommitted -> "commit:${step.commitId}"
             else -> null
         }
-        // Fail closed for tools: this version has no tool dispatch/claim codec.
+        // Journal evidence is permitted. This store never dispatches tools; a
+        // claimed execution is not proof of an external action's outcome.
         val ordinal = conn.prepareStatement("""
             SELECT COALESCE(MAX(ordinal),0)+1 FROM agent_steps WHERE run_id=?
         """.trimIndent()).use { stmt ->

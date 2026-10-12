@@ -115,18 +115,53 @@ class SqliteAgentRunStoreTest {
         }
     }
 
-    @Test fun unimplementedToolDispatchCannotEnterJournal() = runBlocking {
+    @Test fun claimedExecutionIsNotAutomaticallyConfirmedOrRepeated() = runBlocking {
         db().use { store ->
             store.create(run("safe"))
-            assertThrows(UnsupportedOperationException::class.java) {
-                runBlocking {
-                    store.appendStep(AgentStep.ToolDispatched(
-                        id = AgentStepId("dispatched"), runId = AgentRunId("safe"),
-                        createdAt = start, toolCallId = "call", toolId = "shell", idempotencyKey = "x"
-                    ))
-                }
-            }
-            assertTrue(store.get(AgentRunId("safe"))!!.steps.isEmpty())
+            val claim = AgentStep.ToolExecutionClaimed(
+                id = AgentStepId("claimed-1"), runId = AgentRunId("safe"),
+                createdAt = start, invocationId = ToolInvocationId("invocation-1"),
+                toolCallId = "call-1", toolId = "dangerous-action",
+                idempotencyKey = "once-ever-1", replaySafety = "NEVER_REPLAY"
+            )
+            assertTrue(store.appendStep(claim))
+            assertFalse(store.appendStep(claim))
+            val repeated = claim.copy(id=AgentStepId("claimed-2"))
+            assertFalse(store.appendStep(repeated))
+            val record = store.get(AgentRunId("safe"))!!.steps.single()
+            assertTrue(record is AgentStep.ToolExecutionClaimed)
+            assertEquals("NEVER_REPLAY", (record as AgentStep.ToolExecutionClaimed).replaySafety)
+            // A claim is not evidence that an external action happened.
+            assertTrue(store.get(AgentRunId("safe"))!!.hasUnknownAction)
+        }
+    }
+
+    @Test fun uncertainOutcomeSurvivesRestartAndCannotBecomeConfirmed() = runBlocking {
+        val id = AgentRunId("uncertain")
+        val prepared = AgentStep.ToolInvocationPrepared(
+            AgentStepId("prepared"), id, start,
+            ToolInvocationId("inv-1"), "call-1", "unknown-device-action",
+            "{\\"power\\":true}", "digest", "key-1", 1, "NEVER_REPLAY"
+        )
+        val claim = AgentStep.ToolExecutionClaimed(
+            AgentStepId("claimed"), id, start,
+            ToolInvocationId("inv-1"), "call-1", "unknown-device-action",
+            "key-1", "NEVER_REPLAY"
+        )
+        db().use { store ->
+            store.create(run("uncertain"))
+            assertTrue(store.appendStep(prepared))
+            assertTrue(store.appendStep(claim))
+        }
+        db().use { store ->
+            val restored = store.get(id)!!
+            assertTrue(restored.hasUnknownAction)
+            val plan = DefaultAgentRecoveryPlanner().plan(restored, null, CapabilitySnapshot())
+            assertTrue(plan is RecoveryPlan.UncertainExternalAction,
+                "Never-replay claims must not be interpreted as safe retries")
+            val status = CanonicalRecoveryInspector(store).inspect().single()
+            assertFalse(status.automaticReplayPermitted)
+            assertEquals("UncertainExternalAction", status.planKind)
         }
     }
 
