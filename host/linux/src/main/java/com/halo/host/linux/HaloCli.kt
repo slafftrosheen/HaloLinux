@@ -199,6 +199,7 @@ object HaloCli {
                         .put("model_id", snapshot.modelId ?: JSONObject.NULL)
                         .put("attempts", snapshot.attempts)
                         .put("successes", snapshot.successes)
+                        .put("in_flight", snapshot.inFlight)
                         .put("last_failure_type", snapshot.lastFailureType ?: JSONObject.NULL)
                         .put("last_latency_ms", snapshot.lastLatencyMs ?: JSONObject.NULL)
                 })

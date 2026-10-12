@@ -22,7 +22,7 @@ import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withTimeout
 import okhttp3.OkHttpClient
 
-enum class LinuxProviderPhase { DISABLED, CONFIGURED, CHECKING, AVAILABLE, DEGRADED, STOPPED }
+enum class LinuxProviderPhase { DISABLED, CONFIGURED, CHECKING, AVAILABLE, INFERENCING, DEGRADED, STOPPED }
 
 /** Content-free status. A configured endpoint is not necessarily reachable. */
 data class LinuxProviderSnapshot(
@@ -31,6 +31,7 @@ data class LinuxProviderSnapshot(
     val modelId: String?,
     val attempts: Long,
     val successes: Long,
+    val inFlight: Boolean,
     val lastFailureType: String?,
     val lastLatencyMs: Long?,
 )
@@ -53,6 +54,7 @@ class LinuxProviderLifecycle(
         LinuxProviderPhase.DISABLED else LinuxProviderPhase.CONFIGURED
     private var attempts = 0L
     private var successes = 0L
+    private var inFlight = false
     private var lastFailureType: String? = null
     private var lastLatencyMs: Long? = null
 
@@ -60,7 +62,7 @@ class LinuxProviderLifecycle(
 
     fun snapshot(): LinuxProviderSnapshot = synchronized(lock) {
         LinuxProviderSnapshot(phase, provider?.id, modelId,
-            attempts, successes, lastFailureType, lastLatencyMs)
+            attempts, successes, inFlight, lastFailureType, lastLatencyMs)
     }
 
     suspend fun checkConnectivity(): Boolean {
@@ -70,7 +72,9 @@ class LinuxProviderLifecycle(
             phase = LinuxProviderPhase.CHECKING
         }
         return try {
-            val result = withTimeout(timeoutMs.coerceAtMost(15_000)) { target.testConnection() }
+            val result = withTimeout(timeoutMs.coerceAtMost(15_000)) {
+                inferencePermit.withPermit { target.testConnection() }
+            }
             synchronized(lock) {
                 phase = if (result) LinuxProviderPhase.AVAILABLE else LinuxProviderPhase.DEGRADED
                 lastFailureType = if (result) null else "CONNECTION_PROBE_FAILED"
@@ -103,11 +107,20 @@ class LinuxProviderLifecycle(
             // Applies both to queue admission and generation. No duplicate retry on timeout.
             val result = withTimeout(timeoutMs) {
                 inferencePermit.withPermit {
-                    target.generate(
-                        AiRequest(text = text, modelId = model, interactionId = interactionId,
-                            toolUseMode = com.halo.sdk.provider.ToolUseMode.NONE),
-                        AiContext.EMPTY
-                    )
+                    synchronized(lock) {
+                        check(phase != LinuxProviderPhase.STOPPED) { "Provider is stopped" }
+                        phase = LinuxProviderPhase.INFERENCING
+                        inFlight = true
+                    }
+                    try {
+                        target.generate(
+                            AiRequest(text = text, modelId = model, interactionId = interactionId,
+                                toolUseMode = com.halo.sdk.provider.ToolUseMode.NONE),
+                            AiContext.EMPTY
+                        )
+                    } finally {
+                        synchronized(lock) { inFlight = false }
+                    }
                 }
             }
             if (result.toolCalls.isNotEmpty()) throw AiProviderException(
