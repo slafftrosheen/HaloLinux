@@ -1,0 +1,168 @@
+package com.halo.host.linux
+
+import java.io.ByteArrayOutputStream
+import java.io.InputStream
+import java.net.StandardProtocolFamily
+import java.net.UnixDomainSocketAddress
+import java.nio.channels.Channels
+import java.nio.channels.FileChannel
+import java.nio.channels.ServerSocketChannel
+import java.nio.channels.SocketChannel
+import java.nio.file.Files
+import java.nio.file.LinkOption
+import java.nio.file.Path
+import java.nio.file.StandardOpenOption
+import java.nio.file.attribute.PosixFilePermission
+import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import org.json.JSONObject
+
+/**
+ * Local-only control protocol. Each connection receives one JSON-line request.
+ * A bounded worker pool ensures a stalled client cannot block process health.
+ *
+ * The lock is held for the entire daemon lifetime; stale socket removal happens
+ * only after the lock is acquired. Never unlink an active daemon's socket.
+ */
+class LocalControlServer(
+    private val path: Path,
+    private val handler: (JSONObject) -> JSONObject,
+) : AutoCloseable {
+    private val closed = AtomicBoolean(false)
+    private val clients = ThreadPoolExecutor(
+        4, 4, 0, TimeUnit.MILLISECONDS, ArrayBlockingQueue(16)
+    ) { task -> Thread(task, "halo-local-request").apply { isDaemon = true } }
+    private val deadlines: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor {
+        task -> Thread(task, "halo-local-deadlines").apply { isDaemon = true }
+    }
+    private var server: ServerSocketChannel? = null
+    private var lockChannel: FileChannel? = null
+    private var lock: java.nio.channels.FileLock? = null
+
+    fun serve() {
+        val parent = path.parent ?: error("Socket requires parent directory")
+        Files.createDirectories(parent)
+        require(!Files.isSymbolicLink(parent)) { "Socket directory must not be a symlink" }
+        Files.setPosixFilePermissions(parent, setOf(
+            PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE,
+            PosixFilePermission.OWNER_EXECUTE
+        ))
+        lockChannel = FileChannel.open(
+            parent.resolve("node.lock"), StandardOpenOption.CREATE, StandardOpenOption.WRITE
+        )
+        lock = try {
+            lockChannel!!.tryLock()
+        } catch (_: java.nio.channels.OverlappingFileLockException) { null }
+        if (lock == null) {
+            lockChannel?.close()
+            error("Halo node is already running")
+        }
+        try {
+            if (Files.exists(path, LinkOption.NOFOLLOW_LINKS)) {
+                require(!Files.isSymbolicLink(path)) { "Refusing symlinked control socket" }
+                Files.delete(path)
+            }
+            server = ServerSocketChannel.open(StandardProtocolFamily.UNIX)
+            server!!.bind(UnixDomainSocketAddress.of(path))
+            Files.setPosixFilePermissions(path, setOf(
+                PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE
+            ))
+            while (!closed.get()) {
+                val client = try { server!!.accept() }
+                catch (_: java.nio.channels.ClosedChannelException) { break }
+                try {
+                    clients.execute { serveClient(client) }
+                } catch (_: RejectedExecutionException) {
+                    client.close() // overloaded; fail closed rather than blocking accept
+                }
+            }
+        } finally {
+            close()
+        }
+    }
+
+    private fun serveClient(client: SocketChannel) {
+        val watchdog = deadlines.schedule(
+            { runCatching { client.close() } }, 180, TimeUnit.SECONDS
+        )
+        try {
+            client.use {
+                val input = Channels.newInputStream(it)
+                val line = readFrame(input)
+                val response = try {
+                    handler(JSONObject(line))
+                } catch (failure: Exception) {
+                    JSONObject().put("ok", false).put("error", "Request failed")
+                }
+                Channels.newOutputStream(it).write((response.toString() + "\n").toByteArray(Charsets.UTF_8))
+            }
+        } catch (_: Exception) {
+            // A malformed/stalled client must not terminate the daemon.
+        } finally {
+            watchdog.cancel(false)
+        }
+    }
+
+    override fun close() {
+        if (!closed.compareAndSet(false, true)) return
+        runCatching { server?.close() }
+        clients.shutdownNow()
+        deadlines.shutdownNow()
+        if (lock != null) {
+            // Only the owner of the lock may remove the named socket.
+            runCatching { Files.deleteIfExists(path) }
+        }
+        runCatching { lock?.release() }
+        runCatching { lockChannel?.close() }
+    }
+
+    companion object {
+        const val MAX_REQUEST_BYTES = 131_072
+
+        internal fun readFrame(input: InputStream): String {
+            val bytes = ByteArrayOutputStream()
+            while (bytes.size() <= MAX_REQUEST_BYTES) {
+                val value = input.read()
+                if (value < 0) throw IllegalArgumentException("Incomplete control frame")
+                if (value == 10) return bytes.toString(Charsets.UTF_8)
+                bytes.write(value)
+            }
+            throw IllegalArgumentException("Control frame exceeds maximum size")
+        }
+    }
+}
+
+/** CLI caller: private Unix socket, single bounded JSON-line request. */
+object LocalControlClient {
+    fun exchange(path: Path, input: JSONObject): JSONObject {
+        SocketChannel.open(StandardProtocolFamily.UNIX).use { channel ->
+            // A separate deadline shuts down a wedged daemon response.
+            val timeout = Executors.newSingleThreadScheduledExecutor { task ->
+                Thread(task, "halo-client-timeout").apply { isDaemon = true }
+            }
+            val cancellation = timeout.schedule(
+                { runCatching { channel.close() } }, 180, TimeUnit.SECONDS
+            )
+            try {
+                channel.connect(UnixDomainSocketAddress.of(path))
+                Channels.newOutputStream(channel).write(
+                    (input.toString() + "\n").toByteArray(Charsets.UTF_8)
+                )
+                val response = LocalControlServer.readFrame(Channels.newInputStream(channel))
+                val result = JSONObject(response)
+                if (!result.optBoolean("ok")) {
+                    throw IllegalStateException(result.optString("error", "Request rejected"))
+                }
+                return result
+            } finally {
+                cancellation.cancel(false)
+                timeout.shutdownNow()
+            }
+        }
+    }
+}

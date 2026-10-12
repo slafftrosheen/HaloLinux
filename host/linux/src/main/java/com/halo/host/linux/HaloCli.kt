@@ -111,71 +111,28 @@ object HaloCli {
         println("Synchronization: DISABLED")
     }
 
-    private fun request(message: JSONObject): JSONObject {
-        val channel = SocketChannel.open(StandardProtocolFamily.UNIX)
-        channel.use {
-            it.connect(UnixDomainSocketAddress.of(socketPath()))
-            val writer = Channels.newOutputStream(it).bufferedWriter()
-            writer.write(message.toString() + "\n")
-            writer.flush()
-            val responseLine = Channels.newInputStream(it).bufferedReader().readLine()
-                ?: throw IllegalStateException("Daemon closed connection without a response")
-            val result = JSONObject(responseLine)
-            if (!result.optBoolean("ok")) throw IllegalStateException(result.optString("error", "Request failed"))
-            return result
-        }
-    }
+    private fun request(message: JSONObject): JSONObject =
+        LocalControlClient.exchange(socketPath(), message)
 
     private fun serve() {
         val config = NodeConfiguration.load()
-        val sock = socketPath()
-        // Confirm an existing socket is stale before unlinking. Do not replace a live daemon.
-        if (Files.exists(sock)) {
-            val live = runCatching {
-                SocketChannel.open(StandardProtocolFamily.UNIX).use {
-                    it.connect(UnixDomainSocketAddress.of(sock))
-                }
-            }.isSuccess
-            check(!live) { "Halo node already running" }
-            Files.deleteIfExists(sock)
-        }
         val storage = LinuxStorage()
         runBlocking {
             storage.initialize(LinuxStorageConfig(dataDir = config.dataDir))
             storage.getNodeIdentity()
         }
-        val server = ServerSocketChannel.open(StandardProtocolFamily.UNIX)
+        val server = LocalControlServer(socketPath()) { input ->
+            runBlocking { handle(storage, config, input) }
+        }
+        val shutdown = Thread { server.close() }
+        Runtime.getRuntime().addShutdownHook(shutdown)
         try {
-            server.bind(UnixDomainSocketAddress.of(sock))
-            Files.setPosixFilePermissions(sock, setOf(
-                PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE
-            ))
-            val shutdown = Thread { runCatching { server.close() } }
-            Runtime.getRuntime().addShutdownHook(shutdown)
-            println("Halo node running: ${config.displayName} (local socket: $sock)")
-            while (server.isOpen) {
-                val client = try { server.accept() } catch (_: java.nio.channels.ClosedChannelException) { break }
-                client.use {
-                    val source = Channels.newInputStream(it).bufferedReader()
-                    val sink = Channels.newOutputStream(it).bufferedWriter()
-                    val line = source.readLine()
-                    val response = try {
-                        if (line == null || line.length > 1_000_000) {
-                            JSONObject().put("ok", false).put("error", "Invalid request")
-                        } else runBlocking { handle(storage, config, JSONObject(line)) }
-                    } catch (e: Exception) {
-                        JSONObject().put("ok", false)
-                            .put("error", "Request failed: ${e.javaClass.simpleName}")
-                    }
-                    sink.write(response.toString() + "\n")
-                    sink.flush()
-                }
-            }
-            runCatching { Runtime.getRuntime().removeShutdownHook(shutdown) }
+            println("Halo node ready (local control socket; no LAN listener)")
+            server.serve()
         } finally {
-            runCatching { server.close() }
+            server.close()
             runBlocking { storage.close() }
-            Files.deleteIfExists(sock)
+            runCatching { Runtime.getRuntime().removeShutdownHook(shutdown) }
         }
     }
 
