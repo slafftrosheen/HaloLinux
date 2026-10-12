@@ -103,15 +103,21 @@ class LinuxCognitiveTurn(
                 } catch (_: Exception) {
                     journalState = "NEEDS_RECONCILIATION"
                 }
+                try {
+                    runtime.publish(InferenceObserved(
+                        requestId = interactionId,
+                        providerId = response.providerId,
+                        requestedModelId = provider.modelId,
+                        resolvedModelId = response.modelId,
+                        success = true,
+                    ))
+                    runtime.publish(LinuxTurnEvent(
+                        interactionId = interactionId, stage = LinuxTurnStage.COMMITTED
+                    ))
+                } catch (_: Exception) {
+                    // A failed observer must not erase a durable conversation.
+                }
             }
-            runtime.publish(InferenceObserved(
-                requestId = interactionId,
-                providerId = response.providerId,
-                requestedModelId = provider.modelId,
-                resolvedModelId = response.modelId,
-                success = true,
-            ))
-            runtime.publish(LinuxTurnEvent(interactionId = interactionId, stage = LinuxTurnStage.COMMITTED))
             return LinuxTextTurnResult(interactionId, newConversationId, response.text,
                 response.providerId, response.modelId, elapsed, agentRunId, journalState)
         } catch (cancel: CancellationException) {
