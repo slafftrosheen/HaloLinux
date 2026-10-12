@@ -80,14 +80,14 @@ object HaloCli {
             "memory" -> {
                 val op = args.getOrNull(1)
                 val value = args.drop(2).joinToString(" ").trim()
-                if (op !in setOf("add", "search") || value.isBlank()) {
-                    throw IllegalArgumentException("Usage: halo-node memory [add|search] <text>")
+                if (op !in setOf("add", "search", "delete") || value.isBlank()) {
+                    throw IllegalArgumentException("Usage: halo-node memory [add|search|delete] <text-or-id>")
                 }
                 val reply = request(JSONObject().put("op", "memory.$op").put("text", value))
                 println(reply.toString(2)); 0
             }
             else -> {
-                System.err.println("Usage: halo-node [--version|doctor|config show|start|status|ask <text>|memory add <text>|memory search <query>]")
+                System.err.println("Usage: halo-node [--version|doctor|config show|start|status|ask <text>|memory add <text>|memory search <query>|memory delete <id>]")
                 2
             }
         }
@@ -157,6 +157,10 @@ object HaloCli {
                     id, text, "explicit-cli", "personal", 1.0, null, now, now, "{}"
                 ))
                 JSONObject().put("ok", true).put("id", id)
+            }
+            "memory.delete" -> {
+                val id = input.getString("text").trim()
+                JSONObject().put("ok", true).put("deleted", store.deleteMemory(id))
             }
             "memory.search" -> {
                 val text = input.getString("text").trim()

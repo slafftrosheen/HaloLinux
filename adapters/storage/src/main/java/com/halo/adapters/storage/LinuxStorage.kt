@@ -285,8 +285,13 @@ class LinuxStorage {
                 ORDER BY rank
                 LIMIT ?
             """.trimIndent()).use { stmt ->
-                stmt.setString(1, query)
-                stmt.setInt(2, limit)
+                val tokens = Regex("[\\\\p{L}\\\\p{N}_]+").findAll(query)
+                    .map { it.value }.take(20).toList()
+                require(tokens.isNotEmpty()) { "Search must include a word or number" }
+                stmt.setString(1, tokens.joinToString(" AND ") { token ->
+                    "\"" + token.replace("\"", "\"\"") + "\""
+                })
+                stmt.setInt(2, limit.coerceIn(1, 100))
                 stmt.executeQuery().use { rs ->
                     val results = mutableListOf<MemoryRecord>()
                     while (rs.next()) {
@@ -304,6 +309,16 @@ class LinuxStorage {
                     }
                     results
                 }
+            }
+        }
+    }
+
+    suspend fun deleteMemory(id: String): Boolean = withContext(Dispatchers.IO) {
+        require(id.isNotBlank() && id.length <= 256) { "Invalid memory ID" }
+        openConnection().use { conn ->
+            conn.prepareStatement("DELETE FROM memories WHERE id = ?").use { stmt ->
+                stmt.setString(1, id)
+                stmt.executeUpdate() == 1
             }
         }
     }

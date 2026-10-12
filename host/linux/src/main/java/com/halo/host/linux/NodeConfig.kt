@@ -38,8 +38,14 @@ object NodeConfiguration {
             val uri = runCatching { URI(endpoint) }.getOrElse {
                 throw IllegalArgumentException("Invalid inference endpoint URL")
             }
-            require(uri.scheme in setOf("http", "https") && !uri.host.isNullOrBlank() && uri.userInfo == null) {
-                "Inference endpoint must be an HTTP(S) URL without embedded credentials"
+            require(uri.scheme in setOf("http", "https") && !uri.host.isNullOrBlank() && uri.userInfo == null && uri.query == null && uri.fragment == null) {
+                "Inference endpoint must be an HTTP(S) URL without embedded credentials, query, or fragment"
+            }
+        }
+        if (endpoint != null && endpoint.startsWith("http://", ignoreCase = true)) {
+            val host = URI(endpoint).host?.lowercase().orEmpty()
+            require(host in setOf("localhost", "127.0.0.1", "::1")) {
+                "Unencrypted inference endpoints are supported on loopback only. Use HTTPS for LAN/remote providers."
             }
         }
         val model = (inference["model"] as? String)?.trim()?.takeIf(String::isNotBlank)

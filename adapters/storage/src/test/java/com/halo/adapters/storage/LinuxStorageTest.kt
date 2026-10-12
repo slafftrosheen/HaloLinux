@@ -49,4 +49,17 @@ class LinuxStorageTest {
         assertEquals("Testing",b.loadConversation("conv-1")?.messages?.single()?.content)
         b.close()
     }
+    @Test fun plainTextSearchAndDeletion() = runTest {
+        val db = open()
+        val timestamp = Instant.now()
+        db.storeMemory(MemoryRecord("delete-me", "C++ and Raspberry Pi 5",
+            "test","personal",1.0,null,timestamp,timestamp,"{}"))
+        assertEquals(1, db.searchMemories("Raspberry Pi").size)
+        assertEquals(1, db.searchMemories("C++").size)
+        assertTrue(db.deleteMemory("delete-me"))
+        assertTrue(db.searchMemories("Raspberry").isEmpty())
+        assertFalse(db.deleteMemory("delete-me"))
+        db.close()
+    }
+
 }

@@ -13,6 +13,7 @@ install -m 0600 "$JAR" "$LIB_DIR/halo-node.jar"
 cat > "$BIN_DIR/halo-node" <<'LAUNCHER'
 #!/usr/bin/env bash
 set -euo pipefail
+umask 077
 JAR="$HOME/.local/lib/halo-linux/halo-node.jar"
 exec java -Djava.awt.headless=true -jar "$JAR" "$@"
 LAUNCHER
