@@ -30,3 +30,11 @@
 2. Run `scripts/smoke-test.sh`; no source review can replace this.
 3. Confirm ARM64 native SQLite on a Pi or ARM64 test machine.
 4. Install on Trixie Desktop, collect logs and fix observed hardware integration.
+
+## Static repository audit
+
+The current 13-module build-file dependency graph was checked through the GitHub
+source API: no missing project references and no cycles. An offline equivalent
+is provided by `python3 scripts/check-module-graph.py`.
+
+This is *not* JVM compilation evidence and cannot establish ARM64 JNI support.

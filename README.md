@@ -23,6 +23,38 @@ This is not yet a production-ready Linux service. See [implementation status](do
 - `runtime/*` — subset and placeholders; **not** the full cognitive runtime
 - `protocol/schemas` — proposed, not yet interoperable sync schemas
 
+## Raspberry Pi 5 / Trixie Desktop first
+
+Initial supported reference setup is a **Pi 5 (8 GB), Raspberry Pi OS
+Trixie 64-bit ARM64 with Desktop**. A later headless move should reuse the
+same user account, configuration, XDG data and node identity.
+
+- [Trixie Desktop first-run guide](docs/TRIXIE-DESKTOP.md)
+- [Desktop-to-headless migration](docs/TRIXIE-HEADLESS-MIGRATION.md)
+- [Local control protocol](docs/LOCAL-CONTROL-V1.md)
+- [Pre-deployment gates](docs/PRE-DEPLOYMENT-GATES.md)
+
+Run the offline Gradle module graph audit before attempting network builds:
+
+```bash
+python3 scripts/check-module-graph.py
+./gradlew clean build --no-daemon
+./scripts/smoke-test.sh
+```
+
+The source has not been JVM-build-verified or ARM64-hardware-verified. Please do
+not treat a static dependency check as an executable acceptance test.
+
+Once the daemon is running, backups and non-sensitive diagnostics are available:
+
+```bash
+halo-node storage check
+halo-node storage backup "$HOME/halo-backup-001.db"
+```
+
+Backups contain the private node identity and should be encrypted when stored
+off-device or shared. An existing backup file is never overwritten.
+
 ## Build (requires JDK 21 and network for dependencies)
 
 ```bash
