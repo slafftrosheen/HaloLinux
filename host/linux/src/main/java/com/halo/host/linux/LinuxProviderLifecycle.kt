@@ -69,23 +69,31 @@ class LinuxProviderLifecycle(
 
     suspend fun checkConnectivity(): Boolean {
         val target = provider ?: return false
-        return try {
-            withTimeout(timeoutMs.coerceAtMost(15_000)) {
-                inferencePermit.withPermit {
-                    synchronized(lock) {
-                        check(!closed) { "Provider is stopped" }
-                        phase = LinuxProviderPhase.CHECKING
-                    }
-                    val result = target.testConnection()
-                    synchronized(lock) {
-                        if (!closed) {
-                            phase = if (result) LinuxProviderPhase.AVAILABLE else LinuxProviderPhase.DEGRADED
-                            lastFailureType = if (result) null else "CONNECTION_PROBE_FAILED"
-                        }
-                    }
-                    result && synchronized(lock) { !closed }
+        // A health probe must not queue behind a long local generation and
+        // then incorrectly mark the busy model as unavailable.
+        val admitted = try {
+            withTimeout(admissionTimeoutMs) {
+                inferencePermit.acquire()
+                true
+            }
+        } catch (_: kotlinx.coroutines.TimeoutCancellationException) {
+            return false // Still busy, not a provider failure.
+        }
+        try {
+            synchronized(lock) {
+                check(!closed) { "Provider is stopped" }
+                phase = LinuxProviderPhase.CHECKING
+            }
+            val result = withTimeout(timeoutMs.coerceAtMost(15_000L)) {
+                target.testConnection()
+            }
+            synchronized(lock) {
+                if (!closed) {
+                    phase = if (result) LinuxProviderPhase.AVAILABLE else LinuxProviderPhase.DEGRADED
+                    lastFailureType = if (result) null else "CONNECTION_PROBE_FAILED"
                 }
             }
+            return result && synchronized(lock) { !closed }
         } catch (cancel: CancellationException) {
             synchronized(lock) {
                 if (!closed) {
@@ -101,7 +109,9 @@ class LinuxProviderLifecycle(
                     lastFailureType = "CONNECTION_PROBE_FAILED"
                 }
             }
-            false
+            return false
+        } finally {
+            if (admitted) inferencePermit.release()
         }
     }
 

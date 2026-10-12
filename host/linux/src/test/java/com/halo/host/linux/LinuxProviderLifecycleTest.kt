@@ -128,4 +128,34 @@ class LinuxProviderLifecycleTest {
         }
     }
 
+    @Test fun healthCheckDoesNotDegradeAnActiveGeneration() = runBlocking {
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val provider = object : AiInferenceProvider by fixture() {
+            override suspend fun generate(request: AiRequest, context: AiContext): AiResponse {
+                entered.complete(Unit)
+                release.await()
+                return AiResponse(text = "complete", providerId = "fixture",
+                    modelId = request.modelId)
+            }
+        }
+        val lifecycle = LinuxProviderLifecycle(
+            provider, "fixture-model", timeoutMs = 5_000, admissionTimeoutMs = 40
+        )
+        val running = async(Dispatchers.Default) {
+            lifecycle.generate("first", "interaction-1")
+        }
+        try {
+            withTimeout(1_000) { entered.await() }
+            assertFalse(lifecycle.checkConnectivity())
+            assertEquals(LinuxProviderPhase.INFERENCING, lifecycle.snapshot().phase)
+            assertTrue(lifecycle.snapshot().inFlight)
+            assertNull(lifecycle.snapshot().lastFailureType)
+        } finally {
+            release.complete(Unit)
+            withTimeout(1_000) { running.await() }
+            lifecycle.close()
+        }
+    }
+
 }
