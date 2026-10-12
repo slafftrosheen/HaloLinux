@@ -24,30 +24,30 @@ import javax.sql.DataSource
  * Uses XDG Base Directory Specification for data locations,
  * with SQLite for structured data and filesystem for blobs.
  */
-class LinuxStorage : Storage {
+class LinuxStorage {
     private val log = LoggerFactory.getLogger(LinuxStorage::class.java)
     
     private lateinit var dataDir: Path
     private lateinit var configDir: Path
     private lateinit var cacheDir: Path
     private lateinit var dbPath: Path
-    private lateinit var dataSource: DataSource
+    
 
-    override suspend fun initialize(config: Storage.Config) {
+    suspend fun initialize(config: LinuxStorageConfig = LinuxStorageConfig()) {
         log.info("Initializing Linux storage...")
         
         // Determine data directories using XDG spec
         val home = Paths.get(System.getProperty("user.home"))
-        val xdgDataHome = System.getenv("XDG_DATA_HOME")?.let { Paths.get(it) } 
+        val xdgDataHome = config.dataDir?.let { Paths.get(it) } ?: System.getenv("XDG_DATA_HOME")?.let { Paths.get(it) } 
             ?: home.resolve(".local/share")
-        val xdgConfigHome = System.getenv("XDG_CONFIG_HOME")?.let { Paths.get(it) } 
+        val xdgConfigHome = config.configDir?.let { Paths.get(it) } ?: System.getenv("XDG_CONFIG_HOME")?.let { Paths.get(it) } 
             ?: home.resolve(".config")
-        val xdgCacheHome = System.getenv("XDG_CACHE_HOME")?.let { Paths.get(it) } 
+        val xdgCacheHome = config.cacheDir?.let { Paths.get(it) } ?: System.getenv("XDG_CACHE_HOME")?.let { Paths.get(it) } 
             ?: home.resolve(".cache")
         
-        dataDir = xdgDataHome.resolve("halo-linux")
-        configDir = xdgConfigHome.resolve("halo-linux")
-        cacheDir = xdgCacheHome.resolve("halo-linux")
+        dataDir = if (config.dataDir == null) xdgDataHome.resolve("halo-linux") else xdgDataHome
+        configDir = if (config.configDir == null) xdgConfigHome.resolve("halo-linux") else xdgConfigHome
+        cacheDir = if (config.cacheDir == null) xdgCacheHome.resolve("halo-linux") else xdgCacheHome
         dbPath = dataDir.resolve("halo.db")
         
         // Create directories
@@ -68,149 +68,90 @@ class LinuxStorage : Storage {
         log.info("Linux storage initialized at: ${dataDir}")
     }
 
-    private fun initializeDatabase() {
-        val url = "jdbc:sqlite:${dbPath.toAbsolutePath()}?journal_mode=WAL&foreign_keys=on"
-        dataSource = object : DataSource {
-            override fun getConnection(): Connection = DriverManager.getConnection(url)
-            override fun getConnection(username: String, password: String): Connection = getConnection()
-            override fun <T : Any> getConnection(username: String, password: String, classType: Class<T>): Connection = getConnection()
-            override fun <T : Any> getConnection(classType: Class<T>): Connection = getConnection()
-            override fun getLoginTimeout(): Int = 30
-            override fun setLoginTimeout(seconds: Int) {}
-            override fun getLogWriter() = java.sql.DriverManager.getLogWriter()
-            override fun setLogWriter(out: java.io.PrintWriter) { java.sql.DriverManager.setLogWriter(out) }
+    private fun openConnection(): Connection =
+        DriverManager.getConnection("jdbc:sqlite:${dbPath.toAbsolutePath()}").also { conn ->
+            conn.createStatement().use { stmt ->
+                stmt.execute("PRAGMA foreign_keys = ON")
+                stmt.execute("PRAGMA busy_timeout = 5000")
+            }
         }
-        
-        // Run migrations
+
+    private fun initializeDatabase() {
+        openConnection().use { conn ->
+            conn.createStatement().use { it.execute("PRAGMA journal_mode = WAL") }
+        }
         runMigrations()
     }
 
+    private data class Migration(val version: Int, val description: String, val statements: List<String>)
+    
     private fun runMigrations() {
-        dataSource.getConnection().use { conn ->
-            conn.createStatement().execute("""
-                CREATE TABLE IF NOT EXISTS schema_version (
-                    version INTEGER PRIMARY KEY,
-                    applied_at TEXT NOT NULL,
-                    description TEXT
-                )
-            """.trimIndent())
-            
-            val currentVersion = conn.createStatement()
-                .executeQuery("SELECT COALESCE(MAX(version), 0) FROM schema_version")
-                .use { rs -> if (rs.next()) rs.getInt(1) else 0 }
-            
-            val migrations = listOf(
-                1 to "Create core tables" to """
-                    CREATE TABLE IF NOT EXISTS conversations (
-                        id TEXT PRIMARY KEY,
-                        title TEXT,
-                        created_at TEXT NOT NULL,
-                        updated_at TEXT NOT NULL,
-                        provider_id TEXT,
-                        model_id TEXT,
-                        metadata TEXT
-                    );
-                    
-                    CREATE TABLE IF NOT EXISTS messages (
-                        id TEXT PRIMARY KEY,
-                        conversation_id TEXT NOT NULL,
-                        role TEXT NOT NULL,
-                        content TEXT NOT NULL,
-                        provider_id TEXT,
-                        model_id TEXT,
-                        tokens_used INTEGER,
-                        latency_ms INTEGER,
-                        created_at TEXT NOT NULL,
-                        metadata TEXT,
-                        FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
-                    );
-                    
-                    CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id);
-                    CREATE INDEX IF NOT EXISTS idx_messages_created ON messages(created_at);
-                    
-                    CREATE TABLE IF NOT EXISTS memories (
-                        id TEXT PRIMARY KEY,
-                        content TEXT NOT NULL,
-                        source TEXT,
-                        scope TEXT,
-                        confidence REAL,
-                        expires_at TEXT,
-                        created_at TEXT NOT NULL,
-                        updated_at TEXT NOT NULL,
-                        metadata TEXT
-                    );
-                    
-                    CREATE INDEX IF NOT EXISTS idx_memories_scope ON memories(scope);
-                    CREATE INDEX IF NOT EXISTS idx_memories_expires ON memories(expires_at);
-                    
-                    CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
-                        content, source, scope,
-                        content='memories', content_rowid='rowid'
-                    );
-                    
-                    CREATE TRIGGER IF NOT EXISTS memories_ai AFTER INSERT ON memories BEGIN
-                        INSERT INTO memories_fts(rowid, content, source, scope) VALUES (new.rowid, new.content, new.source, new.scope);
-                    END;
-                    
-                    CREATE TRIGGER IF NOT EXISTS memories_ad AFTER DELETE ON memories BEGIN
-                        INSERT INTO memories_fts(memories_fts, rowid, content, source, scope) VALUES ('delete', old.rowid, old.content, old.source, old.scope);
-                    END;
-                    
-                    CREATE TRIGGER IF NOT EXISTS memories_au AFTER UPDATE ON memories BEGIN
-                        INSERT INTO memories_fts(memories_fts, rowid, content, source, scope) VALUES ('delete', old.rowid, old.content, old.source, old.scope);
-                        INSERT INTO memories_fts(rowid, content, source, scope) VALUES (new.rowid, new.content, new.source, new.scope);
-                    END;
-                """,
-                2 to "Add node identity table" to """
-                    CREATE TABLE IF NOT EXISTS node_identity (
-                        key TEXT PRIMARY KEY,
-                        value TEXT NOT NULL,
-                        updated_at TEXT NOT NULL
-                    );
-                    
-                    CREATE TABLE IF NOT EXISTS sync_peers (
-                        id TEXT PRIMARY KEY,
-                        name TEXT,
-                        public_key TEXT NOT NULL,
-                        trust_state TEXT NOT NULL,
-                        capabilities TEXT,
-                        last_seen TEXT,
-                        created_at TEXT NOT NULL,
-                        metadata TEXT
-                    );
-                """,
-            )
-            
-            for ((version, description, sql) in migrations) {
-                if (version > currentVersion) {
-                    log.info("Applying migration $version: $description")
-                    conn.createStatement().execute(sql)
-                    conn.prepareStatement("INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)")
-                        .use { stmt ->
-                            stmt.setInt(1, version)
-                            stmt.setString(2, Instant.now().toString())
-                            stmt.setString(3, description)
-                            stmt.executeUpdate()
-                        }
+        val migrations = listOf(
+            Migration(1, "Core persistence and FTS5", listOf(
+                "CREATE TABLE IF NOT EXISTS conversations (id TEXT PRIMARY KEY, title TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, provider_id TEXT, model_id TEXT, metadata TEXT)",
+                "CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE, role TEXT NOT NULL, content TEXT NOT NULL, provider_id TEXT, model_id TEXT, tokens_used INTEGER, latency_ms INTEGER, created_at TEXT NOT NULL, metadata TEXT)",
+                "CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id)",
+                "CREATE INDEX IF NOT EXISTS idx_messages_created ON messages(created_at)",
+                "CREATE TABLE IF NOT EXISTS memories (id TEXT PRIMARY KEY, content TEXT NOT NULL, source TEXT, scope TEXT, confidence REAL, expires_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, metadata TEXT)",
+                "CREATE INDEX IF NOT EXISTS idx_memories_scope ON memories(scope)",
+                "CREATE INDEX IF NOT EXISTS idx_memories_expires ON memories(expires_at)",
+                "CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(content, source, scope, content='memories', content_rowid='rowid')",
+                "CREATE TRIGGER IF NOT EXISTS memories_ai AFTER INSERT ON memories BEGIN INSERT INTO memories_fts(rowid,content,source,scope) VALUES(new.rowid,new.content,new.source,new.scope); END",
+                "CREATE TRIGGER IF NOT EXISTS memories_ad AFTER DELETE ON memories BEGIN INSERT INTO memories_fts(memories_fts,rowid,content,source,scope) VALUES('delete',old.rowid,old.content,old.source,old.scope); END",
+                "CREATE TRIGGER IF NOT EXISTS memories_au AFTER UPDATE ON memories BEGIN INSERT INTO memories_fts(memories_fts,rowid,content,source,scope) VALUES('delete',old.rowid,old.content,old.source,old.scope); INSERT INTO memories_fts(rowid,content,source,scope) VALUES(new.rowid,new.content,new.source,new.scope); END"
+            )),
+            Migration(2, "Node identity and sync peers", listOf(
+                "CREATE TABLE IF NOT EXISTS node_identity (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL)",
+                "CREATE TABLE IF NOT EXISTS sync_peers (id TEXT PRIMARY KEY, name TEXT, public_key TEXT NOT NULL, trust_state TEXT NOT NULL, capabilities TEXT, last_seen TEXT, created_at TEXT NOT NULL, metadata TEXT)"
+            ))
+        )
+        openConnection().use { conn ->
+            conn.createStatement().use { stmt ->
+                stmt.execute("CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL, description TEXT)")
+            }
+            var current = conn.createStatement().use { stmt ->
+                stmt.executeQuery("SELECT COALESCE(MAX(version), 0) FROM schema_version").use { rs ->
+                    if (rs.next()) rs.getInt(1) else 0
+                }
+            }
+            migrations.filter { it.version > current }.forEach { migration ->
+                conn.autoCommit = false
+                try {
+                    migration.statements.forEach { sql ->
+                        conn.createStatement().use { stmt -> stmt.execute(sql) }
+                    }
+                    conn.prepareStatement("INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)").use { stmt ->
+                        stmt.setInt(1, migration.version)
+                        stmt.setString(2, Instant.now().toString())
+                        stmt.setString(3, migration.description)
+                        stmt.executeUpdate()
+                    }
+                    conn.commit()
+                    current = migration.version
+                } catch (failure: Exception) {
+                    conn.rollback()
+                    throw IllegalStateException("SQLite migration ${migration.version} failed", failure)
+                } finally {
+                    conn.autoCommit = true
                 }
             }
         }
     }
 
-    override suspend fun getDataDirectory(): String = withContext(Dispatchers.IO) {
+    suspend fun getDataDirectory(): String = withContext(Dispatchers.IO) {
         dataDir.toAbsolutePath().toString()
     }
 
-    override suspend fun getConfigDirectory(): String = withContext(Dispatchers.IO) {
+    suspend fun getConfigDirectory(): String = withContext(Dispatchers.IO) {
         configDir.toAbsolutePath().toString()
     }
 
-    override suspend fun getCacheDirectory(): String = withContext(Dispatchers.IO) {
+    suspend fun getCacheDirectory(): String = withContext(Dispatchers.IO) {
         cacheDir.toAbsolutePath().toString()
     }
 
-    override suspend fun storeConversation(conversation: ConversationRecord) = withContext(Dispatchers.IO) {
-        dataSource.getConnection().use { conn ->
+    suspend fun storeConversation(conversation: ConversationRecord) = withContext(Dispatchers.IO) {
+        openConnection().use { conn ->
             conn.setAutoCommit(false)
             try {
                 conn.prepareStatement("""
@@ -254,8 +195,8 @@ class LinuxStorage : Storage {
         }
     }
 
-    override suspend fun loadConversation(id: String): ConversationRecord? = withContext(Dispatchers.IO) {
-        dataSource.getConnection().use { conn ->
+    suspend fun loadConversation(id: String): ConversationRecord? = withContext(Dispatchers.IO) {
+        openConnection().use { conn ->
             conn.prepareStatement("SELECT * FROM conversations WHERE id = ?")
                 .use { stmt ->
                     stmt.setString(1, id)
@@ -301,8 +242,8 @@ class LinuxStorage : Storage {
         }
     }
 
-    override suspend fun listConversations(limit: Int = 50, offset: Int = 0): List<ConversationSummary> = withContext(Dispatchers.IO) {
-        dataSource.getConnection().use { conn ->
+    suspend fun listConversations(limit: Int = 50, offset: Int = 0): List<ConversationSummary> = withContext(Dispatchers.IO) {
+        openConnection().use { conn ->
             conn.prepareStatement("SELECT id, title, created_at, updated_at, provider_id, model_id FROM conversations ORDER BY updated_at DESC LIMIT ? OFFSET ?")
                 .use { stmt ->
                     stmt.setInt(1, limit)
@@ -325,8 +266,8 @@ class LinuxStorage : Storage {
         }
     }
 
-    override suspend fun searchMemories(query: String, limit: Int = 20): List<MemoryRecord> = withContext(Dispatchers.IO) {
-        dataSource.getConnection().use { conn ->
+    suspend fun searchMemories(query: String, limit: Int = 20): List<MemoryRecord> = withContext(Dispatchers.IO) {
+        openConnection().use { conn ->
             conn.prepareStatement("""
                 SELECT m.* FROM memories m
                 JOIN memories_fts f ON m.rowid = f.rowid
@@ -357,8 +298,8 @@ class LinuxStorage : Storage {
         }
     }
 
-    override suspend fun storeMemory(memory: MemoryRecord) = withContext(Dispatchers.IO) {
-        dataSource.getConnection().use { conn ->
+    suspend fun storeMemory(memory: MemoryRecord) = withContext(Dispatchers.IO) {
+        openConnection().use { conn ->
             conn.prepareStatement("""
                 INSERT OR REPLACE INTO memories (id, content, source, scope, confidence, expires_at, created_at, updated_at, metadata)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -377,8 +318,8 @@ class LinuxStorage : Storage {
         }
     }
 
-    override suspend fun getNodeIdentity(): NodeIdentity = withContext(Dispatchers.IO) {
-        dataSource.getConnection().use { conn ->
+    suspend fun getNodeIdentity(): NodeIdentity = withContext(Dispatchers.IO) {
+        openConnection().use { conn ->
             val map = mutableMapOf<String, String>()
             conn.createStatement()
                 .executeQuery("SELECT key, value FROM node_identity")
@@ -417,8 +358,8 @@ class LinuxStorage : Storage {
         }
     }
 
-    override suspend fun setNodeIdentity(identity: NodeIdentity) = withContext(Dispatchers.IO) {
-        dataSource.getConnection().use { conn ->
+    suspend fun setNodeIdentity(identity: NodeIdentity) = withContext(Dispatchers.IO) {
+        openConnection().use { conn ->
             conn.setAutoCommit(false)
             try {
                 val entries = mapOf(
@@ -445,7 +386,7 @@ class LinuxStorage : Storage {
         }
     }
 
-    override suspend fun close() = withContext(Dispatchers.IO) {
+    suspend fun close() = withContext(Dispatchers.IO) {
         log.info("Closing Linux storage")
         // HikariCP would be used in production for connection pooling
     }
