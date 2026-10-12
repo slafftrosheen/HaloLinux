@@ -104,3 +104,19 @@ Do not enable tools or auto-replay as a workaround for compile failures.
 3. Demonstrate canonical `AgentRunCoordinator` startup classification and
    recovery *without* enabling action execution.
 4. Implement host tool authorization and resource admission separately.
+
+## HALO-LINUX-019 — source committed, optional agent store
+
+- Real SHA-pinned canonical `AgentRunStore` interface implemented using SQLite
+  in `adapters/agent-store` under experimental `haloCanonicalCognition` flag.
+- Explicit v1 journal codec for supported text/recovery/input steps; unsupported
+  tool evidence fails closed. Unknown schemas are not deserialized dynamically.
+- Atomic resume/recovery claims, journal identity dedup, input first-writer
+  resolution, and bounded child admission.
+- Read-only startup/health inspector uses canonical recovery planner. No
+  automatic replay or tool execution.
+- Tests committed for restart, atomic CAS, duplicate journal IDs, pending input,
+  child limits, unknown variants and classification-only behavior.
+- Test execution and optional Gradle compilation **not verified**.
+- `halo-node storage backup` excludes the optional separate agent database.
+  Deployment must not treat it as a complete node backup.

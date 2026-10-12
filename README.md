@@ -153,3 +153,15 @@ agent coordinator and recovery planner directly from a local checkout:
 See [canonical agent portability](docs/CANONICAL-AGENT-PORTABILITY.md)
 and [current implementation status](docs/IMPLEMENTATION-STATUS.md).
 This is **experimental compilation**, not a production-ready agent executor.
+
+## Experimental canonical agent recovery
+
+The optional HALO-LINUX-019 adapter implements the actual canonical Halo
+`AgentRunStore` with transactional SQLite claims and a restricted, versioned
+journal codec. It can classify interrupted canonical runs on daemon startup
+using the real Halo recovery planner. **No automatic replay or tools are enabled.**
+
+The standalone Pi build is unchanged. To build and test the opt-in agent mode,
+use `scripts/verify-canonical-cognition.sh` with the pinned canonical Halo
+worktree. See [agent-store limits](docs/CANONICAL-AGENT-STORE.md), including
+the separate database backup requirement.

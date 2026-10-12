@@ -35,11 +35,18 @@ Halo checkout and does NOT include this module by default.
 - The real recovery planner can classify unsupported, unjournaled work as
   ineligible for automatic recovery.
 
+## HALO-LINUX-019 update
+
+The opt-in [canonical agent store](CANONICAL-AGENT-STORE.md) now implements
+the *real* `AgentRunStore` contract with a restricted, strict v1 SQLite journal
+codec, atomic claims and read-only recovery classification. This is implemented
+in source, not yet build-verified. It is not a complete tool-aware run store
+or a running canonical coordinator.
+
 ## What it would NOT establish
 
-- A production SQLite implementation of `AgentRunStore`.
-- All run journal step serialization, atomic append/deduplication and replay
-  admission.
+- A complete, fully verified, tool-aware SQLite implementation of `AgentRunStore`.
+- Serialization for every canonical journal variant or authorized tool replay.
 - Reliable tool authorization or external action reconciliation.
 - A wired `CognitiveSession`, multi-turn context, or autonomous tool executor.
 - A passing default standalone/ARM64 build or Pi 5 hardware acceptance.

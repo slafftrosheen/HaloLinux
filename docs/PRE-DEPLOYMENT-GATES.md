@@ -57,3 +57,19 @@ node identity. Check SDK copy licensing/provenance and move to versioned shared
 contracts. Peer pairing/sync cannot be advertised as implemented yet.
 
 All gates are **pending actual execution** unless logs from the target device are supplied.
+
+## Optional gate H — HALO-LINUX-019 canonical recovery (DO NOT ENABLE ON PI YET)
+
+With a SHA-pinned separate Halo checkout, run:
+
+```bash
+./scripts/verify-canonical-cognition.sh ../HaloLinux-canonical
+```
+
+Pass the actual canonical cognition, SQLite agent store and optional host tests
+before building an experimental agent-enabled JAR. The standard Pi evaluation
+build omits this experimental integration. No automatic agent actions are enabled.
+
+**Backup warning:** the existing main storage backup command does **not** back up
+the separate `canonical-agent-runs.db`. Both private databases need a
+coordinated backup/recovery plan. See `docs/CANONICAL-AGENT-STORE.md`.
