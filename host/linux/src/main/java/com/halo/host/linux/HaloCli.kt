@@ -78,7 +78,14 @@ object HaloCli {
                 val question = args.drop(1).joinToString(" ").trim()
                 if (question.isEmpty()) throw IllegalArgumentException("Provide a question")
                 val reply = request(JSONObject().put("op", "ask").put("text", question))
-                println(reply.getString("text")); 0
+                println(reply.getString("text"))
+                if (reply.optString("canonical_journal_state") == "NEEDS_RECONCILIATION") {
+                    System.err.println(
+                        "WARNING: Answer saved locally; canonical agent journal needs reconciliation. " +
+                        "Run: halo-node agent recovery. Do not retry automatically."
+                    )
+                }
+                0
             }
             "node" -> {
                 if (args.getOrNull(1) != "backup" || args.size != 3) {
@@ -139,7 +146,7 @@ object HaloCli {
                 println(reply.toString(2)); 0
             }
             else -> {
-                System.err.println("Usage: halo-node [--version|doctor|config show|start|status|ask <text>|memory add <text>|memory search <query>|memory delete <id>|agent recovery|storage check|storage backup <absolute-path>]")
+                System.err.println("Usage: halo-node [--version|doctor|config show|start|status|ask <text>|memory add <text>|memory search <query>|memory delete <id>|agent recovery|node backup <absolute-private-folder>|storage check|storage backup <absolute-path>]")
                 2
             }
         }

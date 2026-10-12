@@ -147,3 +147,29 @@ continues to exclude canonical agent cognition. Host-specific semantic/UI
 receipts, complex handoffs and some direct-authority records are still
 unsupported by the strict journal codec and will fail closed. This is not
 yet a complete portable coordinator for user-facing agent execution.
+
+## HALO-LINUX-021–023 source batches — pre-test checkpoint
+
+- **021A/B:** Experimental text turns now go through the actual pinned
+  `DefaultAgentRunCoordinator`, recording `RunPrepared`, provider turn
+  evidence, `ResponseProduced` and eventual `ResponseCommitted`.
+  The main database remains responsible for the atomic local conversation
+  commit. A secondary journal mismatch is surfaced as
+  `NEEDS_RECONCILIATION` without triggering automatic inference retry.
+- **022A/B:** Host mutation gate serializes write-producing commands while
+  allowing status/health reads; `halo-node node backup /absolute/private/folder`
+  creates two SQLite snapshots where applicable, a SHA-256 manifest, and an
+  owner-only backup directory. Failure rolls back the newly created set.
+- **023A/B/C:** Read-only Python snapshot verification, corruption/privacy
+  fixtures, default daemon smoke integration and experimental
+  canonical-success/failure text-turn test sources.
+
+**Still unverified:** JVM clean build, canonical adapter/host test execution,
+full-node snapshot execution on an ARM64 host, Pi 5/Trixie audio/NVMe,
+24-hour stability, and encryption/restore operations. Do not interpret
+GitHub commits as passing integration tests. The canonical adapter remains
+experimental; no user action/tool execution or automatic recovery enabled.
+
+Before Pi deployment, collect compiler output and actual test logs. Do not
+enable the optional canonical cognition integration by default until its
+Gradle API/ABI compatibility is demonstrated against the pinned Halo worktree.

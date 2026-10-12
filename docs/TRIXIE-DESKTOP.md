@@ -116,3 +116,23 @@ Never claim an NPU/GPU delegate is present without a supported backend and measu
 
 See [Desktop-to-headless migration](TRIXIE-HEADLESS-MIGRATION.md).
 The principle is to change boot/session management, not the Halo storage schema.
+
+## First acceptance commands after obtaining the Pi
+
+Run in the local desktop Terminal (no service is installed automatically
+by diagnostics):
+
+```bash
+python3 scripts/check-module-graph.py
+python3 scripts/check-snapshot-verifier.py
+./gradlew clean build --no-daemon
+./scripts/smoke-test.sh
+./scripts/preflight.sh
+```
+
+Only if all mandatory checks pass, proceed to the user-service installation.
+Check `docs/PRE-DEPLOYMENT-GATES.md` for the acceptance order.
+
+Optional canonical agent mode is a separate experiment requiring a second,
+pinned canonical Halo checkout and `verify-canonical-cognition.sh`.
+Do not conflate that with the standalone Pi acceptance build.
