@@ -186,8 +186,8 @@ object HaloCli {
         val storage = LinuxStorage()
         val runtime = LinuxRuntimeBridge(storage)
         val provider = LinuxProviderLifecycle.create(config)
-        val cognition = LinuxCognitiveTurn(provider, storage, runtime, recoverySupport = { recovery })
         var recovery: LinuxRecoverySupport = DisabledRecoverySupport
+        val cognition = LinuxCognitiveTurn(provider, storage, runtime, recoverySupport = { recovery })
         val server = LocalControlServer(socketPath()) { input ->
             runBlocking { handle(storage, config, runtime, provider, cognition, recovery, input) }
         }
