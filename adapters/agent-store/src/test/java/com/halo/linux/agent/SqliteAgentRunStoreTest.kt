@@ -229,4 +229,49 @@ class SqliteAgentRunStoreTest {
         }
     }
 
+    @Test fun resolutionRequiresCorrectPendingStateAndInputLength() = runBlocking {
+        db().use { storage ->
+            val id = AgentRunId("clarify")
+            val reqId = AgentInputRequestId("clarify-1")
+            storage.create(run("clarify", AgentRunState.WAITING_FOR_CLARIFICATION))
+            assertTrue(storage.appendStep(AgentStep.InputRequested(
+                AgentStepId("ask-clarification"), id, start, reqId,
+                AgentInputRequest.Clarification(
+                    id = reqId, runId = id, createdAt = start,
+                    question = "Enter a short label", field = "label",
+                    expected = ExpectedInput.Text(minLength = 2, maxLength = 5, singleLine = true)
+                )
+            )))
+            assertFalse(storage.resolveInputIfPending(reqId, AgentInputResolution.Approved))
+            assertFalse(storage.resolveInputIfPending(reqId, AgentInputResolution.Clarified("A")))
+            assertFalse(storage.resolveInputIfPending(reqId, AgentInputResolution.Clarified("too-long")))
+            assertFalse(storage.resolveInputIfPending(reqId,
+                AgentInputResolution.Clarified("AA\\nB")))
+            assertTrue(storage.resolveInputIfPending(reqId, AgentInputResolution.Clarified("Halo")))
+            assertFalse(storage.resolveInputIfPending(reqId, AgentInputResolution.Clarified("Again")))
+        }
+        db().use { restored ->
+            assertEquals(2, restored.get(AgentRunId("clarify"))?.steps?.size)
+        }
+    }
+
+    @Test fun providerToolCallsRoundTripWithoutGrantingExecution() = runBlocking {
+        db().use { storage ->
+            storage.create(run("provider-response"))
+            val step = AgentStep.ProviderTurnCompleted(
+                AgentStepId("provider-responded"), AgentRunId("provider-response"), start,
+                ProviderTurnId("provider-turn-1"), "Model proposed a command",
+                listOf(ProviderToolCallRecord("call-1", "run-command", "{ }")),
+                "tool_calls"
+            )
+            assertTrue(storage.appendStep(step))
+            val decoded = storage.get(AgentRunId("provider-response"))!!
+                .steps.single() as AgentStep.ProviderTurnCompleted
+            assertEquals("run-command", decoded.toolCalls.single().toolName)
+            assertEquals("{ }", decoded.toolCalls.single().argumentsJson)
+            assertFalse(CanonicalRecoveryInspector(storage)
+                .inspect().single().automaticReplayPermitted)
+        }
+    }
+
 }

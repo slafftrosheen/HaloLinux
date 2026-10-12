@@ -39,7 +39,7 @@ are never split into multiple committed transactions.
 ## Deliberately restricted codec
 
 v1 supports `RunPrepared`, `ProviderTurnStarted`,
-`ProviderTurnCompleted` with **zero tool calls**, `ResponseProduced`,
+`ProviderTurnCompleted` **including proposed tool-call evidence**, `ResponseProduced`,
 `ResponseCommitted`, `RecoveryClaimed`, `InputRequested`, and
 `InputResolved`. The only supported clarifications are non-sensitive text;
 approval requests may be stored, but approval **does not enable a tool
@@ -156,3 +156,14 @@ For a **coordinated full-node backup**, stop the daemon before restoring,
 and take snapshots of both the main Halo storage and agent run journal.
 These are separate databases; this command does not provide a cross-database
 atomic snapshot.
+
+## HALO-LINUX-020F — strict pending human input
+
+`resolveInputIfPending` now requires the run to be in the correct waiting
+state (approval versus clarification), verifies allowed resolution types, and
+enforces original text-field min/max length and single-line requirements.
+Expiry fails closed unless the resolution records an explicit Expired result.
+The first durable resolution still wins; approvals never dispatch a tool.
+
+New regression fixtures verify proposed provider tool calls survive journaling
+without granting execution.

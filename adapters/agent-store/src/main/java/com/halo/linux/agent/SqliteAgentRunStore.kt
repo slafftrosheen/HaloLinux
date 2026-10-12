@@ -426,6 +426,11 @@ class SqliteAgentRunStore(
             if (run.state.isTerminal) return@transaction false
             val journalStep = CanonicalAgentJson.decodeStep(requestRow.second) as AgentStep.InputRequested
             val input = journalStep.input
+            val inCorrectState = when (input) {
+                is AgentInputRequest.Approval -> run.state == AgentRunState.WAITING_FOR_APPROVAL
+                is AgentInputRequest.Clarification -> run.state == AgentRunState.WAITING_FOR_CLARIFICATION
+            }
+            if (!inCorrectState) return@transaction false
             val valid = when (input) {
                 is AgentInputRequest.Approval -> resolution is AgentInputResolution.Approved ||
                     resolution is AgentInputResolution.Denied ||
@@ -436,7 +441,17 @@ class SqliteAgentRunStore(
                     resolution is AgentInputResolution.Expired
             }
             if (!valid) return@transaction false
-            if (input.expiresAt != null && now().isAfter(input.expiresAt) &&
+            if (input is AgentInputRequest.Clarification &&
+                resolution is AgentInputResolution.Clarified) {
+                val expected = input.expected as? ExpectedInput.Text
+                    ?: return@transaction false
+                val value = resolution.value
+                if (value.length !in expected.minLength..expected.maxLength ||
+                    (expected.singleLine && (value.contains('\\n') || value.contains('\\r')))) {
+                    return@transaction false
+                }
+            }
+            if (input.expiresAt != null && !now().isBefore(input.expiresAt) &&
                 resolution !is AgentInputResolution.Expired) return@transaction false
             val step = AgentStep.InputResolved(
                 id = AgentStepId(UUID.randomUUID().toString()),
