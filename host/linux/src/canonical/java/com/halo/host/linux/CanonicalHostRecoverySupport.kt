@@ -120,7 +120,8 @@ class CanonicalHostRecoverySupport(dataDir: Path) : LinuxRecoverySupport {
             id = AgentStepId(UUID.randomUUID().toString()),
             runId = id, createdAt = Instant.now(),
             commitId = runId + ":delivery:1",
-            interactionId = conversationId,
+            interactionId = (store.get(id)?.interactionId?.value
+                ?: throw IllegalStateException("Canonical text run missing")),
         ))) { "Response delivery already recorded" }
         coordinator.complete(id)
         textTurns.remove(runId)

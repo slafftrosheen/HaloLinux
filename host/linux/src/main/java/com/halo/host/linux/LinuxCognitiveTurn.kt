@@ -32,6 +32,7 @@ data class LinuxTextTurnResult(
     val modelId: String?,
     val latencyMs: Long,
     val agentRunId: String? = null,
+    val canonicalJournalState: String = "NOT_LINKED",
 )
 
 /**
@@ -52,9 +53,14 @@ class LinuxCognitiveTurn(
         val start = clockNs()
         var agentRunId: String? = null
         var mainCommitted = false
-        var conversationId: String? = null
         storage.beginTurn(interactionId)
-                try {
+        try {
+            runtime.publish(CognitiveRequestStarted(
+                requestId = interactionId, interactionId = interactionId
+            ))
+            runtime.publish(LinuxTurnEvent(
+                interactionId = interactionId, stage = LinuxTurnStage.ACCEPTED
+            ))
             storage.markTurn(interactionId, "REASONING")
             val target = provider.snapshot()
             agentRunId = recoverySupport().beginTextTurn(
@@ -70,7 +76,6 @@ class LinuxCognitiveTurn(
             val elapsed = TimeUnit.NANOSECONDS.toMillis(clockNs() - start)
             val now = Instant.now()
             val newConversationId = UUID.randomUUID().toString()
-            conversationId = newConversationId
             storage.commitTextTurn(interactionId, ConversationRecord(
                 id = newConversationId,
                 title = text.take(80),
@@ -82,13 +87,23 @@ class LinuxCognitiveTurn(
                 messages = listOf(
                     MessageRecord(UUID.randomUUID().toString(), newConversationId, "user",
                         text, null, null, 0L, 0L, now, "{}"),
-                    MessageRecord(UUID.randomUUID().toString(), conversationId, "assistant",
+                    MessageRecord(UUID.randomUUID().toString(), newConversationId, "assistant",
                         response.text, response.providerId, response.modelId, 0L, elapsed,
                         Instant.now(), "{}")
                 )
             ))
             mainCommitted = true
-            recoverySupport().commitTextDelivery(agentRunId, newConversationId)
+            var journalState = if (agentRunId == null) "NOT_LINKED" else "COMMITTED"
+            try {
+                recoverySupport().commitTextDelivery(agentRunId, newConversationId)
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (_: Exception) {
+                // Main SQLite is authoritative for the delivered text. Returning
+                // an error here would encourage duplicate user retries.
+                // The canonical run remains for explicit recovery inspection.
+                journalState = "NEEDS_RECONCILIATION"
+            }
             runtime.publish(InferenceObserved(
                 requestId = interactionId,
                 providerId = response.providerId,
@@ -98,7 +113,7 @@ class LinuxCognitiveTurn(
             ))
             runtime.publish(LinuxTurnEvent(interactionId = interactionId, stage = LinuxTurnStage.COMMITTED))
             return LinuxTextTurnResult(interactionId, newConversationId, response.text,
-                response.providerId, response.modelId, elapsed, agentRunId)
+                response.providerId, response.modelId, elapsed, agentRunId, journalState)
         } catch (cancel: CancellationException) {
             withContext(NonCancellable) {
                 if (!mainCommitted) {

@@ -100,4 +100,40 @@ class LinuxCognitiveTurnTest {
         }
     }
 
+    @Test fun mainDbCompletionSurvivesSecondaryJournalFailureWithoutDuplicateRetry() = runBlocking {
+        val storage = LinuxStorage()
+        storage.initialize(LinuxStorageConfig(
+            dataDir=folder.resolve("consistent-data").toString(),
+            configDir=folder.resolve("consistent-config").toString(),
+            cacheDir=folder.resolve("consistent-cache").toString()
+        ))
+        val runtime = LinuxRuntimeBridge(storage)
+        val provider = LinuxProviderLifecycle(FixtureInferenceProvider(), "fixture-model")
+        val fake = object : LinuxRecoverySupport {
+            override suspend fun inspect(): org.json.JSONObject = org.json.JSONObject()
+            override suspend fun beginTextTurn(
+                interactionId: String, text: String, providerId: String?, modelId: String?,
+            ): String = "canonical-1"
+            override suspend fun recordTextResponse(runId: String?, response: String) = Unit
+            override suspend fun commitTextDelivery(runId: String?, conversationId: String) {
+                throw IllegalStateException("Simulated secondary database failure")
+            }
+            override fun close() = Unit
+        }
+        try {
+            runtime.start()
+            val answer = LinuxCognitiveTurn(provider, storage, runtime,
+                recoverySupport = { fake }).ask("A private test question")
+            assertEquals("NEEDS_RECONCILIATION", answer.canonicalJournalState)
+            assertEquals("canonical-1", answer.agentRunId)
+            assertEquals(answer.text,
+                storage.loadConversation(answer.conversationId)?.messages?.last()?.content)
+            assertEquals(1L, storage.checkDatabase().conversationCount)
+        } finally {
+            provider.close()
+            runtime.stop()
+            storage.close()
+        }
+    }
+
 }

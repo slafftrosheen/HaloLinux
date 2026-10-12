@@ -301,6 +301,7 @@ object HaloCli {
                     .put("conversation_id", answer.conversationId)
                     .put("interaction_id", answer.interactionId)
                     .put("agent_run_id", answer.agentRunId ?: JSONObject.NULL)
+                    .put("canonical_journal_state", answer.canonicalJournalState)
                     .put("provider_id", answer.providerId)
                     .put("model_id", answer.modelId ?: JSONObject.NULL)
                     .put("latency_ms", answer.latencyMs)

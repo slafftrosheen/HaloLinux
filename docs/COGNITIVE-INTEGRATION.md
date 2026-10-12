@@ -103,3 +103,12 @@ There is no multi-database atomic transaction; failure after the main DB
 commits may leave a canonical run with response evidence but no committed
 delivery record. This is surfaced at startup for classification; **never**
 automatically replay or redeliver the model answer. Tool use stays disabled.
+
+## HALO-LINUX-021B — delivery mismatch classification
+
+If a main SQLite conversation commits but canonical journal finalization
+fails, the response is still returned (so callers do not reflexively retry an
+already successful request), with `canonical_journal_state=NEEDS_RECONCILIATION`.
+The unfinished canonical record is visible to explicit startup recovery
+inspection. No automatic rerun occurs. Cancellation continues to propagate.
+The opt-in result also includes the canonical agent run ID.
