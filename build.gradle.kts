@@ -39,6 +39,7 @@ val canonicalModules = mapOf(
     ":sdk:runtime-sdk" to "sdk/runtime-sdk",
     ":sdk:provider-sdk" to "sdk/provider-sdk",
     ":runtime:events" to "runtime/events",
+    ":runtime:cognition" to "runtime/cognition",
 )
 if (canonicalRootArg != null) {
     val canonicalRoot = file(canonicalRootArg).canonicalFile
