@@ -107,4 +107,31 @@ class LinuxStorageTest {
         storage.close()
     }
 
+    @Test fun interruptedTurnNeverAutomaticallyReexecutes() = runTest {
+        val store = open()
+        store.beginTurn("one")
+        store.markTurn("one", "REASONING")
+        store.beginTurn("two")
+        assertEquals(2, store.reconcileInterruptedTurns())
+        assertEquals(2L, store.countInterruptedTurns())
+        assertEquals(0, store.reconcileInterruptedTurns())
+        store.close()
+        val reopened = open()
+        assertEquals(2L, reopened.countInterruptedTurns())
+        assertEquals(0L, reopened.checkDatabase().conversationCount)
+        reopened.close()
+    }
+
+    @Test fun terminalTurnCannotBeCommittedTwice() = runTest {
+        val store = open()
+        store.beginTurn("replay")
+        store.markTurn("replay", "REASONING")
+        store.markTurn("replay", "COMMITTED", conversationId = "stored")
+        assertThrows(IllegalStateException::class.java) {
+            kotlinx.coroutines.runBlocking { store.markTurn("replay", "COMMITTED", conversationId = "duplicate") }
+        }
+        assertEquals(0L, store.countInterruptedTurns())
+        store.close()
+    }
+
 }

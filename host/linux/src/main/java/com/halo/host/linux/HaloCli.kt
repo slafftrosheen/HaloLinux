@@ -148,6 +148,7 @@ object HaloCli {
         runBlocking {
             storage.initialize(LinuxStorageConfig(dataDir = config.dataDir))
             storage.getNodeIdentity()
+            storage.reconcileInterruptedTurns()
         }
         val runtime = LinuxRuntimeBridge()
         val provider = LinuxProviderLifecycle.create(config)
@@ -192,6 +193,7 @@ object HaloCli {
                         .put("thermal_throttling", "NOT_CHECKED")
                 })
                 .put("storage", "READY")
+                .put("interrupted_text_turns", store.countInterruptedTurns())
                 .put("inference_configured", config.providerConfigured)
                 .put("provider", provider.snapshot().let { snapshot ->
                     JSONObject().put("phase", snapshot.phase.name)

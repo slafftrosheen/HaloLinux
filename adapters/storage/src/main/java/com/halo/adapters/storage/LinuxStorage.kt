@@ -124,6 +124,10 @@ class LinuxStorage {
             Migration(2, "Node identity and sync peers", listOf(
                 "CREATE TABLE IF NOT EXISTS node_identity (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL)",
                 "CREATE TABLE IF NOT EXISTS sync_peers (id TEXT PRIMARY KEY, name TEXT, public_key TEXT NOT NULL, trust_state TEXT NOT NULL, capabilities TEXT, last_seen TEXT, created_at TEXT NOT NULL, metadata TEXT)"
+            )),
+            Migration(3, "Conservative text-turn checkpoint ledger", listOf(
+                "CREATE TABLE IF NOT EXISTS turn_checkpoints (interaction_id TEXT PRIMARY KEY, state TEXT NOT NULL CHECK(state IN ('ACCEPTED','REASONING','COMMITTED','FAILED','INTERRUPTED')), created_at TEXT NOT NULL, updated_at TEXT NOT NULL, conversation_id TEXT, failure_type TEXT)",
+                "CREATE INDEX IF NOT EXISTS idx_turn_checkpoints_state ON turn_checkpoints(state)"
             ))
         )
         openConnection().use { conn ->
@@ -458,6 +462,68 @@ class LinuxStorage {
      * Lightweight SQLite integrity check for diagnostics and pre-deployment acceptance.
      * Never dumps private memory or conversation bodies into diagnostic output.
      */
+    /** Typed, content-free durable checkpoints. Never store prompts or model tokens here. */
+    suspend fun beginTurn(interactionId: String) = withContext(Dispatchers.IO) {
+        require(interactionId.isNotBlank() && interactionId.length <= 128)
+        val now = Instant.now().toString()
+        openConnection().use { conn ->
+            conn.prepareStatement("INSERT INTO turn_checkpoints (interaction_id,state,created_at,updated_at) VALUES (?,'ACCEPTED',?,?)").use { stmt ->
+                stmt.setString(1, interactionId)
+                stmt.setString(2, now)
+                stmt.setString(3, now)
+                check(stmt.executeUpdate() == 1)
+            }
+        }
+    }
+
+    suspend fun markTurn(interactionId: String, state: String, conversationId: String? = null, failureType: String? = null) =
+        withContext(Dispatchers.IO) {
+            require(state in setOf("REASONING", "COMMITTED", "FAILED")) { "Invalid checkpoint transition" }
+            require(failureType == null || failureType.matches(Regex("[A-Z_]{1,64}"))) { "Invalid failure type" }
+            val from = if (state == "REASONING") "ACCEPTED" else "REASONING"
+            openConnection().use { conn ->
+                conn.prepareStatement("""
+                    UPDATE turn_checkpoints
+                    SET state=?, updated_at=?, conversation_id=?, failure_type=?
+                    WHERE interaction_id=? AND state=?
+                """.trimIndent()).use { stmt ->
+                    stmt.setString(1, state)
+                    stmt.setString(2, Instant.now().toString())
+                    stmt.setString(3, conversationId)
+                    stmt.setString(4, failureType)
+                    stmt.setString(5, interactionId)
+                    stmt.setString(6, from)
+                    check(stmt.executeUpdate() == 1) { "Invalid or duplicate turn transition" }
+                }
+            }
+        }
+
+    /**
+     * A crash never causes automatic generation or tool replay. Old inflight turns
+     * are marked INTERRUPTED and remain visible for diagnostics.
+     */
+    suspend fun reconcileInterruptedTurns(): Int = withContext(Dispatchers.IO) {
+        openConnection().use { conn ->
+            conn.prepareStatement("""
+                UPDATE turn_checkpoints SET state='INTERRUPTED', updated_at=?
+                WHERE state IN ('ACCEPTED','REASONING')
+            """.trimIndent()).use { stmt ->
+                stmt.setString(1, Instant.now().toString())
+                stmt.executeUpdate()
+            }
+        }
+    }
+
+    suspend fun countInterruptedTurns(): Long = withContext(Dispatchers.IO) {
+        openConnection().use { conn ->
+            conn.createStatement().use { stmt ->
+                stmt.executeQuery("SELECT COUNT(*) FROM turn_checkpoints WHERE state='INTERRUPTED'").use { rs ->
+                    if (rs.next()) rs.getLong(1) else 0L
+                }
+            }
+        }
+    }
+
     suspend fun checkDatabase(): StorageHealth = withContext(Dispatchers.IO) {
         openConnection().use { conn ->
             val result = conn.createStatement().use { stmt ->

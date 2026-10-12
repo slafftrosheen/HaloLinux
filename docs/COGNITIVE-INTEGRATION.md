@@ -45,3 +45,17 @@ pin a shared canonical agent-run contract and explicit storage adapters before
 tool execution is enabled.
 
 All new code remains source-level pending real Gradle/Linux execution testing.
+
+## HALO-LINUX-011 — crash-safe text-turn checkpoints
+
+SQLite migration v3 adds a content-free `turn_checkpoints` table. A turn
+transitions ACCEPTED → REASONING → COMMITTED or FAILED. Startup reconciles any
+nonterminal checkpoints into INTERRUPTED. **No request is rerun automatically.**
+
+The ledger stores identifiers, state, timestamps, an optional conversation ID
+and a sanitized failure category. It deliberately does not store prompts,
+responses, tokens or authorization data. This is a conservative preparation for
+the canonical AgentRunCoordinator, **not** a replacement for durable agent
+planning/recovery. Conversation commits and ledger commits are currently separate
+transactions; a crash in between can leave an INTERRUPTED checkpoint alongside
+a saved conversation. Neither automatic replay nor deletion occurs in that case.

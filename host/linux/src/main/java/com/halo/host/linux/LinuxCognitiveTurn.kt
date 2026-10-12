@@ -8,6 +8,8 @@ import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 
 enum class LinuxTurnStage { ACCEPTED, REASONING, COMMITTED, FAILED }
 
@@ -43,8 +45,10 @@ class LinuxCognitiveTurn(
         require(text.isNotBlank() && text.length <= 32_000)
         val interactionId = UUID.randomUUID().toString()
         val start = clockNs()
+        storage.beginTurn(interactionId)
         runtime.publish(LinuxTurnEvent(interactionId = interactionId, stage = LinuxTurnStage.ACCEPTED))
         try {
+            storage.markTurn(interactionId, "REASONING")
             runtime.publish(LinuxTurnEvent(interactionId = interactionId, stage = LinuxTurnStage.REASONING))
             val response = provider.generate(text, interactionId)
             val elapsed = TimeUnit.NANOSECONDS.toMillis(clockNs() - start)
@@ -66,13 +70,18 @@ class LinuxCognitiveTurn(
                         Instant.now(), "{}")
                 )
             ))
+            storage.markTurn(interactionId, "COMMITTED", conversationId = conversationId)
             runtime.publish(LinuxTurnEvent(interactionId = interactionId, stage = LinuxTurnStage.COMMITTED))
             return LinuxTextTurnResult(interactionId, conversationId, response.text,
                 response.providerId, response.modelId, elapsed)
         } catch (cancel: CancellationException) {
-            runtime.publish(LinuxTurnEvent(interactionId = interactionId, stage = LinuxTurnStage.FAILED))
+            withContext(NonCancellable) {
+                runCatching { storage.markTurn(interactionId, "FAILED", failureType = "CANCELLED") }
+                runtime.publish(LinuxTurnEvent(interactionId = interactionId, stage = LinuxTurnStage.FAILED))
+            }
             throw cancel
         } catch (error: Exception) {
+            runCatching { storage.markTurn(interactionId, "FAILED", failureType = "FAILED") }
             runtime.publish(LinuxTurnEvent(interactionId = interactionId, stage = LinuxTurnStage.FAILED))
             throw error
         }
