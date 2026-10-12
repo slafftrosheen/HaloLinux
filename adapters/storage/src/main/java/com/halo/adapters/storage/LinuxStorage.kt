@@ -365,6 +365,7 @@ class LinuxStorage {
                 SELECT m.* FROM memories m
                 JOIN memories_fts f ON m.rowid = f.rowid
                 WHERE memories_fts MATCH ?
+                  AND (m.expires_at IS NULL OR julianday(m.expires_at) > julianday(?))
                 ORDER BY rank
                 LIMIT ?
             """.trimIndent()).use { stmt ->
@@ -374,7 +375,8 @@ class LinuxStorage {
                 stmt.setString(1, tokens.joinToString(" AND ") { token ->
                     "\"" + token.replace("\"", "\"\"") + "\""
                 })
-                stmt.setInt(2, limit.coerceIn(1, 100))
+                stmt.setString(2, Instant.now().toString())
+                stmt.setInt(3, limit.coerceIn(1, 100))
                 stmt.executeQuery().use { rs ->
                     val results = mutableListOf<MemoryRecord>()
                     while (rs.next()) {

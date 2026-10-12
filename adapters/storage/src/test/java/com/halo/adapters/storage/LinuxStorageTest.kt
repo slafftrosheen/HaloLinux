@@ -187,4 +187,25 @@ class LinuxStorageTest {
         store.close()
     }
 
+    @Test fun expiredMemoriesAreNotReturnedEvenWhenTheyRankHigher() = runTest {
+        val storage = open()
+        val now = Instant.now()
+        try {
+            storage.storeMemory(MemoryRecord(
+                "expired", "Halo private expiretest note", "test", "personal",
+                1.0, now.minusSeconds(120), now.minusSeconds(360),
+                now.minusSeconds(360), "{}"
+            ))
+            storage.storeMemory(MemoryRecord(
+                "active", "Halo expiretest note for next week", "test", "personal",
+                1.0, now.plusSeconds(86400), now, now, "{}"
+            ))
+            val hits = storage.searchMemories("expiretest", 10)
+            assertEquals(listOf("active"), hits.map { it.id })
+            assertEquals(2L, storage.checkDatabase().memoryCount)
+        } finally {
+            storage.close()
+        }
+    }
+
 }
