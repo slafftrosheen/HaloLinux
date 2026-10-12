@@ -67,10 +67,25 @@ class LinuxStorage {
         Files.createDirectories(dataDir.resolve("attachments"))
         Files.createDirectories(cacheDir.resolve("inference"))
         Files.createDirectories(cacheDir.resolve("audio"))
-        
+        // Directory traversal is blocked even if SQLite subsequently creates WAL/SHM files
+        // with host-default file permissions.
+        (listOf(dataDir, configDir, cacheDir) +
+            listOf("conversations", "memories", "documents", "models", "attachments").map(dataDir::resolve) +
+            listOf("inference", "audio").map(cacheDir::resolve)).forEach { directory ->
+            Files.setPosixFilePermissions(directory, setOf(
+                java.nio.file.attribute.PosixFilePermission.OWNER_READ,
+                java.nio.file.attribute.PosixFilePermission.OWNER_WRITE,
+                java.nio.file.attribute.PosixFilePermission.OWNER_EXECUTE
+            ))
+        }
+
         // Initialize SQLite database
         initializeDatabase()
-        
+        Files.setPosixFilePermissions(dbPath, setOf(
+            java.nio.file.attribute.PosixFilePermission.OWNER_READ,
+            java.nio.file.attribute.PosixFilePermission.OWNER_WRITE
+        ))
+
         log.info("Linux storage initialized at: ${dataDir}")
     }
 
@@ -438,6 +453,89 @@ class LinuxStorage {
         }
     }
 
+
+    /**
+     * Lightweight SQLite integrity check for diagnostics and pre-deployment acceptance.
+     * Never dumps private memory or conversation bodies into diagnostic output.
+     */
+    suspend fun checkDatabase(): StorageHealth = withContext(Dispatchers.IO) {
+        openConnection().use { conn ->
+            val result = conn.createStatement().use { stmt ->
+                stmt.executeQuery("PRAGMA quick_check(1)").use { rs ->
+                    if (rs.next()) rs.getString(1) else "no result"
+                }
+            }
+            val version = conn.createStatement().use { stmt ->
+                stmt.executeQuery("SELECT COALESCE(MAX(version), 0) FROM schema_version").use { rs ->
+                    if (rs.next()) rs.getInt(1) else 0
+                }
+            }
+            val memoryCount = conn.createStatement().use { stmt ->
+                stmt.executeQuery("SELECT COUNT(*) FROM memories").use { rs ->
+                    if (rs.next()) rs.getLong(1) else 0L
+                }
+            }
+            val conversationCount = conn.createStatement().use { stmt ->
+                stmt.executeQuery("SELECT COUNT(*) FROM conversations").use { rs ->
+                    if (rs.next()) rs.getLong(1) else 0L
+                }
+            }
+            StorageHealth(
+                integrityOk = result == "ok", integrityMessage = result.take(200),
+                schemaVersion = version, memoryCount = memoryCount,
+                conversationCount = conversationCount,
+                databaseBytes = Files.size(dbPath)
+            )
+        }
+    }
+
+    /**
+     * SQLite VACUUM INTO produces a consistent point-in-time database snapshot,
+     * including the node's sensitive identity material. The destination must be
+     * an absolute, previously nonexistent, non-symlink file. Never overwrite.
+     */
+    suspend fun createBackup(destination: Path): StorageBackupReceipt = withContext(Dispatchers.IO) {
+        require(destination.isAbsolute) { "Backup destination must be absolute" }
+        val path = destination.normalize()
+        require(path != dbPath.toAbsolutePath().normalize()) { "Cannot overwrite active database" }
+        require(!Files.exists(path, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
+            "Backup destination already exists"
+        }
+        val parent = path.parent ?: throw IllegalArgumentException("Missing backup parent")
+        require(Files.isDirectory(parent) && !Files.isSymbolicLink(parent)) {
+            "Backup parent must be an existing non-symlink directory"
+        }
+        val perms = java.nio.file.attribute.PosixFilePermissions.asFileAttribute(
+            setOf(java.nio.file.attribute.PosixFilePermission.OWNER_READ,
+                java.nio.file.attribute.PosixFilePermission.OWNER_WRITE)
+        )
+        Files.createFile(path, perms)
+        try {
+            openConnection().use { conn ->
+                val quotedPath = path.toString().replace("'", "''")
+                conn.createStatement().use { stmt ->
+                    stmt.execute("VACUUM INTO '$quotedPath'")
+                }
+            }
+            val copy = DriverManager.getConnection("jdbc:sqlite:${path.toAbsolutePath()}").use { conn ->
+                conn.createStatement().use { stmt ->
+                    stmt.executeQuery("PRAGMA quick_check(1)").use { rs ->
+                        rs.next() && rs.getString(1) == "ok"
+                    }
+                }
+            }
+            check(copy) { "Backup failed integrity validation" }
+            Files.setPosixFilePermissions(path, setOf(
+                java.nio.file.attribute.PosixFilePermission.OWNER_READ,
+                java.nio.file.attribute.PosixFilePermission.OWNER_WRITE
+            ))
+            StorageBackupReceipt(path.toString(), Files.size(path))
+        } catch (error: Exception) {
+            runCatching { Files.deleteIfExists(path) }
+            throw error
+        }
+    }
+
     suspend fun close() = withContext(Dispatchers.IO) {
         log.info("Closing Linux storage")
         // HikariCP would be used in production for connection pooling
@@ -523,3 +621,14 @@ data class NodeIdentity(
     val capabilities: List<String>,
     val trustState: String,
 )
+/** Content-free diagnostics; never include node private keys or stored text. */
+data class StorageHealth(
+    val integrityOk: Boolean,
+    val integrityMessage: String,
+    val schemaVersion: Int,
+    val memoryCount: Long,
+    val conversationCount: Long,
+    val databaseBytes: Long,
+)
+
+data class StorageBackupReceipt(val path: String, val bytes: Long)

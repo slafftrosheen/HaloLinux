@@ -62,4 +62,49 @@ class LinuxStorageTest {
         db.close()
     }
 
+    @Test fun backupIsConsistentAndNeverOverwrites() = runTest {
+        val original = open()
+        val now = Instant.now()
+        original.storeMemory(MemoryRecord(
+            "backup-test", "Backup search content", "test", "personal",
+            1.0, null, now, now, "{}"
+        ))
+        val state = original.checkDatabase()
+        assertTrue(state.integrityOk, state.integrityMessage)
+        assertTrue(state.schemaVersion >= 2)
+        assertEquals(1L, state.memoryCount)
+        val file = tempDir.resolve("backup.db")
+        val backup = original.createBackup(file)
+        assertTrue(backup.bytes > 0)
+        assertEquals(file.toString(), backup.path)
+        assertThrows(IllegalArgumentException::class.java) {
+            kotlinx.coroutines.runBlocking { original.createBackup(file) }
+        }
+        original.close()
+        val copy = LinuxStorage()
+        copy.initialize(LinuxStorageConfig(
+            dataDir=tempDir.resolve("restore").toString(),
+            configDir=tempDir.resolve("restore-config").toString(),
+            cacheDir=tempDir.resolve("restore-cache").toString()
+        ))
+        copy.close()
+        // Verify the VACUUM snapshot independently through its own SQLite connection.
+        java.sql.DriverManager.getConnection("jdbc:sqlite:${file}").use { connection ->
+            connection.createStatement().use { statement ->
+                statement.executeQuery("SELECT content FROM memories WHERE id='backup-test'").use { result ->
+                    assertTrue(result.next())
+                    assertEquals("Backup search content", result.getString(1))
+                }
+            }
+        }
+    }
+
+    @Test fun backupDoesNotAllowRelativePaths() = runTest {
+        val storage = open()
+        assertThrows(IllegalArgumentException::class.java) {
+            kotlinx.coroutines.runBlocking { storage.createBackup(Path.of("relative.db")) }
+        }
+        storage.close()
+    }
+
 }
