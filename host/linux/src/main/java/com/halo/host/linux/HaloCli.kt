@@ -78,13 +78,22 @@ object HaloCli {
                 println(reply.getString("text")); 0
             }
             "agent" -> {
-                if (args.getOrNull(1) != "recovery" || args.size != 2) {
-                    throw IllegalArgumentException("Usage: halo-node agent recovery")
+                when (args.getOrNull(1)) {
+                    "recovery" -> {
+                        require(args.size == 2) { "Usage: halo-node agent recovery" }
+                        val snapshot = request(JSONObject().put("op", "status"))
+                            .getJSONObject("canonical_agent_recovery")
+                        println(snapshot.toString(2))
+                        0
+                    }
+                    "backup" -> {
+                        require(args.size == 3) { "Usage: halo-node agent backup /absolute/private/folder/agent.db" }
+                        println(request(JSONObject().put("op", "agent.backup")
+                            .put("destination", args[2])).toString(2))
+                        0
+                    }
+                    else -> throw IllegalArgumentException("Usage: halo-node agent [recovery|backup <absolute-path>]")
                 }
-                val snapshot = request(JSONObject().put("op", "status"))
-                    .getJSONObject("canonical_agent_recovery")
-                println(snapshot.toString(2))
-                0
             }
             "provider" -> {
                 if (args.getOrNull(1) != "check") throw IllegalArgumentException("Usage: halo-node provider check")
@@ -237,6 +246,10 @@ object HaloCli {
                 .put("audio", "NOT_VERIFIED")
                 .put("sync", "DISABLED")
                 .put("node_id", store.getNodeIdentity().nodeId)
+            "agent.backup" -> {
+                val destination = java.nio.file.Path.of(input.getString("destination"))
+                recovery.backup(destination)
+            }
             "provider.check" -> {
                 val connected = provider.checkConnectivity()
                 JSONObject().put("ok", true).put("connection_verified", connected)

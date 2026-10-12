@@ -448,6 +448,65 @@ class SqliteAgentRunStore(
         }
     }
 
+    /**
+     * Consistent online SQLite snapshot. Backup contains private request text,
+     * journal evidence, and potentially authorization metadata: protect it.
+     * Never copy the raw .db file while WAL is active.
+     */
+    suspend fun backupTo(destination: Path): Long = withContext(Dispatchers.IO) {
+        require(destination.isAbsolute) { "Absolute backup path required" }
+        val path = destination.normalize()
+        require(path != database.toAbsolutePath().normalize()) { "Refusing to overwrite live journal" }
+        require(!Files.exists(path, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
+            "Backup destination must not exist"
+        }
+        val parent = path.parent ?: throw IllegalArgumentException("Backup parent missing")
+        require(Files.isDirectory(parent) && !Files.isSymbolicLink(parent)) {
+            "Backup directory must exist and must not be a symlink"
+        }
+        val perms = Files.getPosixFilePermissions(parent)
+        require(perms.none {
+            it == PosixFilePermission.GROUP_WRITE ||
+                it == PosixFilePermission.OTHERS_WRITE ||
+                it == PosixFilePermission.GROUP_READ ||
+                it == PosixFilePermission.OTHERS_READ ||
+                it == PosixFilePermission.GROUP_EXECUTE ||
+                it == PosixFilePermission.OTHERS_EXECUTE
+        }) {
+            "Backup directory must be private (0700)."
+        }
+        synchronized(monitor) {
+            val attr = java.nio.file.attribute.PosixFilePermissions.asFileAttribute(
+                setOf(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE)
+            )
+            Files.createFile(path, attr)
+            try {
+                connection().use { conn ->
+                    conn.prepareStatement("VACUUM INTO ?").use { stmt ->
+                        stmt.setString(1, path.toString())
+                        stmt.execute()
+                    }
+                }
+                DriverManager.getConnection("jdbc:sqlite:${path.toAbsolutePath()}").use { verify ->
+                    verify.createStatement().use { stmt ->
+                        stmt.executeQuery("PRAGMA quick_check").use { results ->
+                            check(results.next() && results.getString(1) == "ok") {
+                                "Agent journal backup integrity check failed"
+                            }
+                        }
+                    }
+                }
+                Files.setPosixFilePermissions(path, setOf(
+                    PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE
+                ))
+                Files.size(path)
+            } catch (error: Exception) {
+                runCatching { Files.deleteIfExists(path) }
+                throw error
+            }
+        }
+    }
+
     override fun close() {
         synchronized(monitor) { closed = true }
     }

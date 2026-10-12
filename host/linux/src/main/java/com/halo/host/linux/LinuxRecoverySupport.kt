@@ -11,6 +11,8 @@ interface LinuxRecoverySupport : AutoCloseable {
     /** Called exactly once after the daemon lock is held. */
     suspend fun prepare() = Unit
     suspend fun inspect(): JSONObject
+    suspend fun backup(destination: Path): JSONObject =
+        throw UnsupportedOperationException("Canonical agent journal is not linked")
 }
 
 object DisabledRecoverySupport : LinuxRecoverySupport {

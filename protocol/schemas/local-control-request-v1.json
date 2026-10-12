@@ -13,13 +13,14 @@
     "op": {
       "enum": [
         "status",
-      "provider.check",
+        "provider.check",
         "ask",
         "memory.add",
         "memory.search",
         "memory.delete",
         "storage.check",
-        "storage.backup"
+        "storage.backup",
+        "agent.backup"
       ]
     },
     "text": {

@@ -199,4 +199,34 @@ class SqliteAgentRunStoreTest {
             CanonicalAgentJson.decodeStep(unknownStep)
         }
     }
+    @Test fun agentDbSnapshotIsConsistentAndNeverOverwritten() = runBlocking {
+        val privateDir = folder.resolve("snapshots")
+        java.nio.file.Files.createDirectories(privateDir)
+        java.nio.file.Files.setPosixFilePermissions(privateDir, setOf(
+            java.nio.file.attribute.PosixFilePermission.OWNER_READ,
+            java.nio.file.attribute.PosixFilePermission.OWNER_WRITE,
+            java.nio.file.attribute.PosixFilePermission.OWNER_EXECUTE
+        ))
+        val target = privateDir.resolve("agent-snapshot.sqlite")
+        db().use { store ->
+            store.create(run("snapshot", AgentRunState.SUSPENDED))
+            assertTrue(store.backupTo(target) > 0)
+            assertThrows(IllegalArgumentException::class.java) {
+                runBlocking { store.backupTo(target) }
+            }
+        }
+        java.sql.DriverManager.getConnection("jdbc:sqlite:${target}").use { db ->
+            db.createStatement().use { stmt ->
+                stmt.executeQuery("PRAGMA quick_check").use { rs ->
+                    assertTrue(rs.next())
+                    assertEquals("ok", rs.getString(1))
+                }
+                stmt.executeQuery("SELECT COUNT(*) FROM agent_runs").use { rs ->
+                    assertTrue(rs.next())
+                    assertEquals(1, rs.getInt(1))
+                }
+            }
+        }
+    }
+
 }

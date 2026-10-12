@@ -54,6 +54,14 @@ class CanonicalHostRecoverySupport(dataDir: Path) : LinuxRecoverySupport {
             .put("tool_execution", false)
     }
 
+    override suspend fun backup(destination: Path): JSONObject {
+        val bytes = store.backupTo(destination)
+        return JSONObject().put("ok", true)
+            .put("backup_path", destination.toString())
+            .put("bytes", bytes)
+            .put("contains_private_agent_runs", true)
+    }
+
     override fun close() {
         scope.cancel()
         store.close()

@@ -142,3 +142,17 @@ unsupported version, daemon initialization fails closed. It does not discard
 or silently convert the unsupported evidence.
 
 Automatic resume and manual resume remain unavailable on this Linux host.
+
+## HALO-LINUX-020E — consistent agent DB backup
+
+Opt-in agent builds expose `halo-node agent backup /absolute/private/folder/agent.db`.
+The parent folder must exist and be owner-only (0700); the snapshot is created
+0600 using `VACUUM INTO`, verified using `PRAGMA quick_check`, and existing
+files are never overwritten. The standalone default build rejects this command
+because no canonical agent journal is linked. This is a separate backup from
+`halo-node storage backup`.
+
+For a **coordinated full-node backup**, stop the daemon before restoring,
+and take snapshots of both the main Halo storage and agent run journal.
+These are separate databases; this command does not provide a cross-database
+atomic snapshot.
