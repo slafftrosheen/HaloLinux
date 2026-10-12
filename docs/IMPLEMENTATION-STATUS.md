@@ -286,3 +286,15 @@ These source changes remain pending Gradle/JUnit execution.
   Once admitted, a mutation is **not** cancelled by the admission timeout.
 
 Source and tests committed; JVM and ARM64 execution are still pending.
+
+## HALO-LINUX-045 — idempotent shutdown barrier
+
+When the shutdown hook and daemon accept thread both enter `close()`,
+the second caller now waits for the first caller's bounded worker drain and
+lock release. This prevents normal storage teardown from racing ahead of the
+socket/server cleanup. A regression test exercises concurrent close callers.
+
+The shutdown policy still has a bounded termination window; an uncooperative
+native library cannot be guaranteed to stop without actual JVM/Pi testing.
+The locally executed, isolated Kotlin/coroutines admission test passed, but
+**none of the repository's Gradle or JUnit tasks have yet been run**.

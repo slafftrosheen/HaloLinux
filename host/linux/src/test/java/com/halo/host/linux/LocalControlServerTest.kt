@@ -151,7 +151,7 @@ class LocalControlServerTest {
         try {
             waiting.connect(UnixDomainSocketAddress.of(path))
             java.nio.channels.Channels.newOutputStream(waiting).write(
-                "{\\\"op\\\":".toByteArray(Charsets.UTF_8)
+                "{".toByteArray(Charsets.UTF_8)
             )
             server.close()
             runner.join(3000)
