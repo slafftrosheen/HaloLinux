@@ -165,3 +165,22 @@ The standalone Pi build is unchanged. To build and test the opt-in agent mode,
 use `scripts/verify-canonical-cognition.sh` with the pinned canonical Halo
 worktree. See [agent-store limits](docs/CANONICAL-AGENT-STORE.md), including
 the separate database backup requirement.
+
+## HALO-LINUX-021–023 — canonical text turns and private snapshots
+
+Experimental pinned canonical builds now journal text requests through the
+real `DefaultAgentRunCoordinator`; standalone builds keep the model-free
+local storage path. Provider/tool execution is never authorized by a journal.
+
+For a private snapshot set from a running node:
+
+```bash
+mkdir -p -m 700 "$HOME/halo-backups"
+halo-node node backup "$HOME/halo-backups/snapshot-001"
+python3 scripts/verify-node-snapshot.py "$HOME/halo-backups/snapshot-001"
+```
+
+Verification is read-only and checks file hashes, database integrity and file
+permissions. **Snapshots are not encrypted.** Always safeguard private node
+identity and notes. Do not try to copy live SQLite files or restore over a
+running service.
