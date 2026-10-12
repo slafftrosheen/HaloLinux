@@ -77,6 +77,15 @@ object HaloCli {
                 val reply = request(JSONObject().put("op", "ask").put("text", question))
                 println(reply.getString("text")); 0
             }
+            "agent" -> {
+                if (args.getOrNull(1) != "recovery" || args.size != 2) {
+                    throw IllegalArgumentException("Usage: halo-node agent recovery")
+                }
+                val snapshot = request(JSONObject().put("op", "status"))
+                    .getJSONObject("canonical_agent_recovery")
+                println(snapshot.toString(2))
+                0
+            }
             "provider" -> {
                 if (args.getOrNull(1) != "check") throw IllegalArgumentException("Usage: halo-node provider check")
                 println(request(JSONObject().put("op", "provider.check")).toString(2)); 0
@@ -110,7 +119,7 @@ object HaloCli {
                 println(reply.toString(2)); 0
             }
             else -> {
-                System.err.println("Usage: halo-node [--version|doctor|config show|start|status|ask <text>|memory add <text>|memory search <query>|memory delete <id>|storage check|storage backup <absolute-path>]")
+                System.err.println("Usage: halo-node [--version|doctor|config show|start|status|ask <text>|memory add <text>|memory search <query>|memory delete <id>|agent recovery|storage check|storage backup <absolute-path>]")
                 2
             }
         }

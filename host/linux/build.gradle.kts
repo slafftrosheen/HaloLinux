@@ -51,4 +51,7 @@ if (providers.gradleProperty("haloCanonicalCognition").orNull == "true") {
     kotlin.sourceSets.named("main") {
         kotlin.srcDir("src/canonical/java")
     }
+    kotlin.sourceSets.named("test") {
+        kotlin.srcDir("src/canonicalTest/java")
+    }
 }

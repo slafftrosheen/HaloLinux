@@ -14,10 +14,19 @@ class LinuxRecoverySupportTest {
         val recovery = LinuxRecoverySupportFactory.open(tempDir)
         recovery.use {
             val result = it.inspect()
-            assertEquals("NOT_LINKED", result.getString("state"))
+            val canonicalLinked = runCatching {
+                Class.forName("com.halo.host.linux.CanonicalHostRecoverySupport")
+            }.isSuccess
+            assertEquals(if (canonicalLinked) "CLASSIFICATION_ONLY" else "NOT_LINKED",
+                result.getString("state"))
             assertFalse(result.getBoolean("automatic_replay"))
             assertFalse(result.getBoolean("tool_execution"))
         }
-        assertFalse(java.nio.file.Files.exists(tempDir.resolve("canonical-agent-runs.db")))
+        // The database exists ONLY when the opt-in canonical source is compiled.
+        val canonicalLinked = runCatching {
+            Class.forName("com.halo.host.linux.CanonicalHostRecoverySupport")
+        }.isSuccess
+        assertEquals(canonicalLinked,
+            java.nio.file.Files.exists(tempDir.resolve("canonical-agent-runs.db")))
     }
 }

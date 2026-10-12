@@ -15,7 +15,8 @@ source. Linux does not maintain a second copy of these interfaces.
 - `CanonicalRecoveryInspector` asks the actual Halo planner to classify
   nonterminal runs. **Classification never executes a recovery plan.**
 - `host/linux/src/canonical/java` adds an optional daemon recovery bridge.
-  `halo-node status` reports content-free plan counts. Normal builds do not
+  `halo-node status` reports content-free plan counts.
+  `halo-node agent recovery` prints only this recovery-status section. Normal builds do not
   create or initialize an agent-run database.
 
 ## Supported contract operations
@@ -108,3 +109,19 @@ authored HALO-LINUX-019.
    resource leases, user approval, and replay-safety tests pass.
 5. Add a complete, consistent backup/restore procedure for both SQLite DBs.
 6. Test ARM64/Trixie before enabling the experimental integration on the Pi 5.
+
+## Inspect after opt-in deployment
+
+The metadata-only operator command is:
+
+```bash
+halo-node agent recovery
+```
+
+Standalone default builds return `{"state":"NOT_LINKED",...}`.
+Experimental pinned cognition builds return `CLASSIFICATION_ONLY` and
+grouped plan counts (not run prompts or provider payloads). This command
+does not resume work.
+
+A host-only regression test for this behavior is under
+`host/linux/src/canonicalTest` and runs with the opt-in verification script.
