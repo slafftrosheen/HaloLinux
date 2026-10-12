@@ -65,7 +65,27 @@ object NodeConfiguration {
             }
         }
         val model = (inference["model"] as? String)?.trim()?.takeIf(String::isNotBlank)
-        val configuredPath = (storage["data_dir"] as? String)?.trim()?.takeIf { it.isNotBlank() }?.let { if (it.startsWith("~/")) home.resolve(it.removePrefix("~/")).toString() else it }
+        // A half-configured provider is a configuration error, not "offline
+        // mode": otherwise users can spend hours diagnosing disabled inference.
+        require((endpoint == null) == (model == null)) {
+            "Inference endpoint and model must both be set, or both omitted"
+        }
+        require(model == null || model.length <= 256) { "Invalid model identifier" }
+        val configuredPath = (storage["data_dir"] as? String)?.trim()
+            ?.takeIf { it.isNotBlank() }?.let { value ->
+                // Resolve once, independently of the daemon's working directory.
+                // Reject relative paths rather than silently moving private data
+                // when transitioning from a desktop terminal to systemd.
+                val selected = if (value.startsWith("~/")) {
+                    home.resolve(value.removePrefix("~/"))
+                } else {
+                    Path.of(value)
+                }
+                require(selected.isAbsolute) {
+                    "storage.data_dir must be absolute or start with ~/"
+                }
+                selected.normalize().toString()
+            }
         val enabled = audio["enabled"] as? Boolean ?: false
         return NodeConfig(
             displayName = (node["display_name"] ?: node["name"]) as? String ?: "Halo Linux Node",

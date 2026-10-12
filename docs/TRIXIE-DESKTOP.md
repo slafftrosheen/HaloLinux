@@ -182,3 +182,14 @@ halo-node ask - < /path/to/private-question.txt
 The input is bounded and rejects oversized prompts. Keep the source text file
 private. Avoid assuming that shell-history and process-argument privacy alone
 provide encryption or protect the SQLite conversation database.
+
+## HALO-LINUX-036 — deterministic paths and provider setup
+
+`storage.data_dir` must be an absolute path or begin with `~/`. Relative
+paths are rejected rather than changing location between the Desktop terminal,
+systemd user service, and later headless operation. The configured path is
+normalized once, without changing the existing default XDG behavior.
+
+An `inference.endpoint` without an `inference.model` (or the reverse) now
+fails at configuration validation. Omit both for offline/memory-only startup;
+provide both when an actual provider and installed model are ready.
