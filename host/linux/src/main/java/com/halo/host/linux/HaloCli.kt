@@ -350,9 +350,7 @@ object HaloCli {
                 val text = input.getString("text").trim()
                 require(text.isNotBlank() && text.length <= 1000) { "Invalid search query" }
                 val hits = runtime.query(SearchLocalMemory(text, 20))
-                val results = JSONArray()
-                hits.forEach { results.put(JSONObject().put("id", it.id).put("content", it.content)) }
-                JSONObject().put("ok", true).put("results", results)
+                LinuxMemoryResponses.searchResults(hits)
             }
             "ask" -> {
                 val text = input.getString("text").trim()

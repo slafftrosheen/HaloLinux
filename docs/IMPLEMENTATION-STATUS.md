@@ -258,3 +258,14 @@ standalone build passes, with actual compiler output retained.
   complete. Admission failure does not mark another active request degraded.
 
 These source changes remain pending Gradle/JUnit execution.
+
+## HALO-LINUX-039–040 — safe memory search
+
+- Memory FTS excludes entries whose `expires_at` has passed, but does not
+  delete them. A regression test includes both active and expired entries.
+- IPC memory search returns up to 20 bounded note excerpts. Every record
+  reports whether its content was truncated; the result includes returned,
+  excerpted and size-omitted counts. The complete original memory stays in
+  SQLite, and the returned JSON is sized before sending.
+- No model automatically receives personal memory from this operation.
+- Kotlin/JUnit tests remain source-only pending an executable JVM build.
