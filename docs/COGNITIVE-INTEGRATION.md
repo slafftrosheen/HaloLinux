@@ -77,3 +77,14 @@ events contain stable IDs, provider/model metadata and outcomes but no prompt
 or response payloads. A fixture regression test asserts both order and lack
 of private request text in emitted events. Linux continues to forbid tools and
 unauthorized replay.
+
+## HALO-LINUX-017 — read-only host query bus
+
+`LinuxRuntimeBridge` now resolves a real canonical `QueryBus`, with exactly
+two typed read-only queries: `SearchLocalMemory` and
+`CountInterruptedTextTurns`. Unknown query types fail explicitly. Provider
+requests still get `AiContext.EMPTY`; private memory is **not** silently
+inserted into prompts, sent over LAN, or exposed as a model tool.
+
+This is a host capability bridge, not a substitute for canonical agent-run
+persistence or tool authorization.

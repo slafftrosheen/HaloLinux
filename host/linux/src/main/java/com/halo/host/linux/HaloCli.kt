@@ -148,7 +148,7 @@ object HaloCli {
     private fun serve() {
         val config = NodeConfiguration.load()
         val storage = LinuxStorage()
-        val runtime = LinuxRuntimeBridge()
+        val runtime = LinuxRuntimeBridge(storage)
         val provider = LinuxProviderLifecycle.create(config)
         val cognition = LinuxCognitiveTurn(provider, storage, runtime)
         val server = LocalControlServer(socketPath()) { input ->
@@ -201,7 +201,7 @@ object HaloCli {
                         .put("thermal_throttling", "NOT_CHECKED")
                 })
                 .put("storage", "READY")
-                .put("interrupted_text_turns", store.countInterruptedTurns())
+                .put("interrupted_text_turns", runtime.query(CountInterruptedTextTurns))
                 .put("inference_configured", config.providerConfigured)
                 .put("provider", provider.snapshot().let { snapshot ->
                     JSONObject().put("phase", snapshot.phase.name)
@@ -256,7 +256,7 @@ object HaloCli {
             "memory.search" -> {
                 val text = input.getString("text").trim()
                 require(text.isNotBlank() && text.length <= 1000) { "Invalid search query" }
-                val hits = store.searchMemories(text, 20)
+                val hits = runtime.query(SearchLocalMemory(text, 20))
                 val results = JSONArray()
                 hits.forEach { results.put(JSONObject().put("id", it.id).put("content", it.content)) }
                 JSONObject().put("ok", true).put("results", results)

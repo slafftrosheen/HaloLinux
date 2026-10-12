@@ -27,7 +27,7 @@ class LinuxCognitiveTurnTest {
             configDir=folder.resolve("config").toString(),
             cacheDir=folder.resolve("cache").toString()
         ))
-        val runtime = LinuxRuntimeBridge()
+        val runtime = LinuxRuntimeBridge(storage)
         val provider = LinuxProviderLifecycle(FixtureInferenceProvider(), "fixture-model")
         try {
             runtime.start()
@@ -52,7 +52,7 @@ class LinuxCognitiveTurnTest {
             configDir=folder.resolve("config2").toString(),
             cacheDir=folder.resolve("cache2").toString()
         ))
-        val runtime = LinuxRuntimeBridge()
+        val runtime = LinuxRuntimeBridge(storage)
         try {
             runtime.start()
             assertThrows(Exception::class.java) {
@@ -74,7 +74,7 @@ class LinuxCognitiveTurnTest {
             configDir=folder.resolve("events-config").toString(),
             cacheDir=folder.resolve("events-cache").toString()
         ))
-        val bridge = LinuxRuntimeBridge()
+        val bridge = LinuxRuntimeBridge(storage)
         val provider = LinuxProviderLifecycle(FixtureInferenceProvider(), "fixture-model")
         val observed = mutableListOf<com.halo.sdk.runtime.HaloEvent>()
         try {

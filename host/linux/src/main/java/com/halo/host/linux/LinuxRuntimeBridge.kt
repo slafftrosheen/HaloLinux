@@ -1,6 +1,7 @@
 package com.halo.host.linux
 
 import com.halo.runtime.events.DefaultEventBus
+import com.halo.adapters.storage.LinuxStorage
 import com.halo.runtime.kernel.resource.DefaultResourceLeaseManager
 import com.halo.sdk.runtime.CommandBus
 import com.halo.sdk.runtime.EngineContext
@@ -26,7 +27,7 @@ import java.util.concurrent.ConcurrentHashMap
  * Query/command execution is deliberately fail-closed until the canonical
  * cognition/tool executors have been wired; no command disappears silently.
  */
-class LinuxRuntimeBridge {
+class LinuxRuntimeBridge(private val storage: LinuxStorage) {
     private val services = LocalServiceRegistry()
     private val events = DefaultEventBus()
     private val resources = DefaultResourceLeaseManager()
@@ -39,10 +40,7 @@ class LinuxRuntimeBridge {
                 throw UnsupportedOperationException("Linux host command execution is not yet wired")
             override fun commands(): Flow<RuntimeCommand> = emptyFlow()
         }
-        override val queryBus: QueryBus = object : QueryBus {
-            override suspend fun <R> execute(query: Query<R>): R =
-                throw UnsupportedOperationException("Linux host query execution is not yet wired")
-        }
+        override val queryBus: QueryBus = LinuxKnowledgeQueries(storage)
         override val scheduler: RuntimeScheduler = object : RuntimeScheduler {
             override val io: CoroutineDispatcher = Dispatchers.IO
             override val compute: CoroutineDispatcher = Dispatchers.Default
@@ -64,6 +62,7 @@ class LinuxRuntimeBridge {
 
     suspend fun start() {
         services.register(ServiceKey(EventBus::class), events)
+        services.register(ServiceKey(QueryBus::class), runtime.queryBus)
         services.register(ServiceKey(ResourceLeaseManager::class), resources)
         engine.initialize(EngineContext(services, runtime))
         engine.start()
@@ -75,6 +74,7 @@ class LinuxRuntimeBridge {
     }
 
     suspend fun publish(event: com.halo.sdk.runtime.HaloEvent) = events.publish(event)
+    suspend fun <R> query(query: Query<R>): R = runtime.queryBus.execute(query)
     fun observeEvents(): Flow<com.halo.sdk.runtime.HaloEvent> = events.events()
 
     fun registeredResources(): ResourceLeaseManager = resources
