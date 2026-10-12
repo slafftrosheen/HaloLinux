@@ -1,10 +1,10 @@
 # HaloLinux pre-deployment acceptance
 
-Do not deploy as an unattended personal node until all **blocking** software checks pass.
-This plan intentionally separates source review, test execution, Pi validation and sync readiness.
+Target for the initial deployment: **Raspberry Pi 5 8 GB, Raspberry Pi OS
+Trixie 64-bit ARM64 with Desktop**, not x86-64.
 
-## Gate 1 — build (blocking)
-On a network-enabled Linux x86-64 or ARM64 developer environment with JDK 21:
+## Gate A — build (BLOCKING)
+From a Pi desktop Terminal (or independent Linux developer machine):
 
 ```bash
 ./gradlew --version
@@ -13,44 +13,47 @@ On a network-enabled Linux x86-64 or ARM64 developer environment with JDK 21:
 ./gradlew :host:linux:shadowJar --no-daemon
 ```
 
-Fix **all** build/compilation failures. Never ignore them or label skipped tests as passed.
+No skipped compilation failures. Save the complete console log on failure.
 
-## Gate 2 — isolated model-free smoke (blocking)
-Run `./scripts/smoke-test.sh`. It must demonstrate real daemon startup, local IPC,
-SQLite/FTS5 retrieval, stable identity across restart, clean SIGTERM and zero secrets in logs.
-Inspect stderr/logs for unexpected crashes. Fix any failure before installing to real data paths.
-
-## Gate 3 — inference (blocking if enabling AI)
-Start an actual local Ollama/llama.cpp OpenAI-compatible service or use a deliberately configured HTTPS endpoint.
-Select a real installed model in `~/.config/halo-linux/config.yaml` and execute:
+## Gate B — isolated smoke (BLOCKING)
 ```bash
-halo-node ask "Reply with one short sentence explaining HaloLinux."
+./scripts/smoke-test.sh
 ```
-Capture provider name, model, elapsed time and success/failure. Missing model or endpoint must fail explicitly.
-Never substitute the fixture provider silently.
 
-## Gate 4 — systemd (blocking for 24/7 operation)
-Install unprivileged user service and verify start, stop, restart and journal output.
-Check that `status` fails when no daemon is running. Investigate logout/session behavior
-before enabling lingering. Never use root as a workaround for filesystem permissions.
+It exercises the real daemon, versioned local Unix IPC, persistence, SQLite FTS5,
+integrity checks, sensitive database snapshot, identity across restart and cleanup.
+This script does not touch installed user data or require a model.
 
-## Gate 5 — Pi 5 acceptance (hardware gated)
-Run `./scripts/preflight.sh` and save results. Then test NVMe mount persistence and
-free space. Check power-supply margin, thermal throttling and CPU/memory pressure.
-Verify *actual* HiFiBerry model and Linux overlays before enabling the audio path.
-Physical record/playback remains NOT VERIFIED until a known test audio file is captured
-and reproduced with the intended card and playback route.
+## Gate C — desktop installation (BLOCKING)
+```bash
+./scripts/preflight.sh
+./scripts/setup-trixie-desktop.sh
+./scripts/install.sh
+~/.local/bin/halo-node --version
+~/.local/bin/halo-node doctor
+```
 
-## Gate 6 — privacy and source ownership (blocking before alpha release)
-Audit file permissions including SQLite WAL/SHM, local socket, node key material.
-Review provider endpoint security. Confirm licensing and removal plan for copied Halo SDKs.
-No accountless pairing or sync should be advertised as implemented until cryptographic
-trust and cross-device compatibility tests exist.
+Edit the configuration in the GUI, start the daemon manually, then validate it
+as a user-level systemd service. Do not run both manual and managed daemon at once.
 
-## Never auto-run these actions
-Do not format disks, repartition NVMe, alter boot overlays, change system services,
-open firewall ports, or install packages automatically from diagnostics.
+## Gate D — inference (OPTIONAL for memory-only node)
+Run one real configured model call; log **latency, RAM and thermal state**, and
+record provider/model identity. Do not substitute fixture output for proof of inference.
+A model-free storage node is a legitimate deployment mode.
 
-## Status
-Documentation/check scripts are **not** proof that the gates were run.
-Record execution output and SHA after the first real Linux build.
+## Gate E — headless transition (DEFERRED)
+Do not change boot targets or enable lingering during the initial desktop test.
+Confirm user-service lifetimes, XDG storage and secret injection before going headless.
+See `docs/TRIXIE-HEADLESS-MIGRATION.md`.
+
+## Gate F — hardware (UNVERIFIED)
+Check Pi voltage/power supply, thermal behaviour, NVMe mount and disk pressure.
+Verify actual HiFiBerry card name, I2S overlays, capture route and playback; enumeration
+alone does not prove streaming audio.
+
+## Gate G — privacy and provenance (BLOCKING before public alpha)
+Review SQLite DB and WAL/SHM permissions, backups and their sensitive private
+node identity. Check SDK copy licensing/provenance and move to versioned shared
+contracts. Peer pairing/sync cannot be advertised as implemented yet.
+
+All gates are **pending actual execution** unless logs from the target device are supplied.

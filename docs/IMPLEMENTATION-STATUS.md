@@ -1,40 +1,32 @@
-# HaloLinux implementation status
+# HaloLinux implementation status — HALO-LINUX-007
 
-Updated through HALO-LINUX-004/005 source commits.
+## Implemented in source, not build-verified
+- Gradle module-direction fix (`runtime-sdk` depends on portable `host-sdk`, not vice versa).
+- Real limited runtime composition: shared event bus, resource lease manager, lifecycle.
+- Commands/queries intentionally reject unsupported execution.
+- Unix-domain socket control v1, bounds and single-instance protection.
+- Explicit memory search/delete, conversation recording, local SQLite integrity diagnostics.
+- SQLite snapshot backup with no-overwrite policy and private identity warning.
+- Read-only Linux memory/thermal reporting and test fixtures.
+- Trixie Desktop onboarding helper and documented later headless transition.
+- Expanded smoke tests, config and storage tests.
 
-## Source implemented, NOT JVM-executed in this work environment
-- Kotlin/JVM Linux CLI, unprivileged user systemd service, local Unix socket daemon.
-- Bounded local IPC worker pool, 180s deadlines, single-instance file lock and permission checks.
-- Explicit configured inference through the existing Halo provider SDK transport.
-- SQLite conversation storage, local FTS5 memory add/search/delete and migrations.
-- Persistent UUID and Ed25519 keypair in private local storage.
-- Diagnostics without printing configuration files.
-- Isolated smoke testing script and read-only Pi 5 hardware preflight script.
-- Test sources for IPC, inference fixtures and SQLite durability.
+## Not verified by execution in this development environment
+- Gradle compile/test and shadow JAR launch (dependencies unavailable).
+- Live model inference, Pi 5 ARM64 native SQLite, SQLite VACUUM INTO acceptance.
+- systemd user-service behavior, thermals, NVMe mount and actual HiFiBerry I/O.
+- All-day stability and error-recovery testing.
 
-## Build & deployment verification (PENDING)
-- JVM/Gradle `clean build` and full test suite: not executed successfully.
-- Isolated `scripts/smoke-test.sh`: not executed.
-- Live inference request: not executed.
-- systemd user service lifecycle: not executed.
-- Linux ARM64 and Raspberry Pi 5: not executed.
-- HiFiBerry audio + NVMe: not executed.
-- Resource usage and 24h stability: not measured.
+## Remaining architectural work
+- Shared SDKs are still copied. See `docs/SHARED-SOURCE-STRATEGY.md`.
+- Conversation and provider interaction remain direct SDK-backed operations, **not**
+  the full canonical Halo CognitiveSession/agent execution pipeline.
+- Streaming audio/STT/TTS, autonomous actions and peer sync are not implemented.
+- `main` has the new code, but GitHub default branch remains `master` until
+  manually changed in repository settings.
 
-## Architecture limitations
-- Real cognition/agent runtime not yet wired through Linux host; initial CLI uses provider SDK directly.
-- Core SDK modules still copied, not consumed as pinned shared artifacts.
-- Full encrypted peer pairing and sync absent; JSON schema sketches alone do not provide sync.
-- No Linux STT/TTS or validated capture/playback stream yet.
-- No external management listener; Unix socket is local-user only.
-- `main` has recent development commits but GitHub repository default still `master`.
-  Switch default in repository settings after review.
-
-## Blocking steps before unattended deployment
-1. Run `./gradlew clean build` and fix any errors using a network-enabled Linux environment.
-2. Run the isolated smoke test and all JVM tests. No skipped/ignored failures.
-3. Verify authenticated/configured provider with a real model or deploy memory-only intentionally.
-4. Run systemd start/stop and process restart checks.
-5. Confirm service filesystem permissions, disk space, backups and Pi power/thermal state.
-
-See `docs/PRE-DEPLOYMENT-GATES.md` and `docs/SHARED-SOURCE-STRATEGY.md`.
+## Next pass before physical deployment
+1. Execute an actual Linux JDK 21 build and fix any compile/runtime defects.
+2. Run `scripts/smoke-test.sh`; no source review can replace this.
+3. Confirm ARM64 native SQLite on a Pi or ARM64 test machine.
+4. Install on Trixie Desktop, collect logs and fix observed hardware integration.
