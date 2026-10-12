@@ -99,18 +99,18 @@ class LinuxCognitiveTurn(
                     resolvedModelId = null,
                     success = false,
                 ))
-                runtime.publish(InferenceObserved(
+                runtime.publish(LinuxTurnEvent(interactionId = interactionId, stage = LinuxTurnStage.FAILED))
+            }
+            throw cancel
+        } catch (error: Exception) {
+            runCatching { storage.markTurn(interactionId, "FAILED", failureType = "FAILED") }
+            runtime.publish(InferenceObserved(
                 requestId = interactionId,
                 providerId = provider.snapshot().providerId ?: "unconfigured",
                 requestedModelId = provider.modelId,
                 resolvedModelId = null,
                 success = false,
             ))
-            runtime.publish(LinuxTurnEvent(interactionId = interactionId, stage = LinuxTurnStage.FAILED))
-            }
-            throw cancel
-        } catch (error: Exception) {
-            runCatching { storage.markTurn(interactionId, "FAILED", failureType = "FAILED") }
             runtime.publish(LinuxTurnEvent(interactionId = interactionId, stage = LinuxTurnStage.FAILED))
             throw error
         }
