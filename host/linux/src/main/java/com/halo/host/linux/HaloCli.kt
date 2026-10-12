@@ -29,12 +29,15 @@ import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import okhttp3.OkHttpClient
 import org.json.JSONArray
 import org.json.JSONObject
 
 /** Local-only CLI and daemon control interface. No LAN listener is created. */
 object HaloCli {
+    private val mutationGate = Mutex()
     private fun socketPath(): Path {
         val home = Path.of(System.getProperty("user.home"))
         val runtime = System.getenv("XDG_RUNTIME_DIR")?.let(Path::of)
@@ -76,6 +79,14 @@ object HaloCli {
                 if (question.isEmpty()) throw IllegalArgumentException("Provide a question")
                 val reply = request(JSONObject().put("op", "ask").put("text", question))
                 println(reply.getString("text")); 0
+            }
+            "node" -> {
+                if (args.getOrNull(1) != "backup" || args.size != 3) {
+                    throw IllegalArgumentException("Usage: halo-node node backup /absolute/private/snapshot-folder")
+                }
+                println(request(JSONObject().put("op", "node.backup")
+                    .put("destination", args[2])).toString(2))
+                0
             }
             "agent" -> {
                 when (args.getOrNull(1)) {
@@ -215,7 +226,24 @@ object HaloCli {
                 .put("supported_version", 1)
         }
         val op = input.optString("op")
-        return when (op) {
+        // Serializes all host-controlled writes, including inference turns.
+        // Read-only status and provider health remain concurrently available.
+        val writeOperations = setOf(
+            "ask", "memory.add", "memory.delete", "storage.backup",
+            "agent.backup", "node.backup"
+        )
+        return if (op in writeOperations) {
+            mutationGate.withLock { dispatch(op, store, config, runtime, provider, cognition, recovery, input) }
+        } else {
+            dispatch(op, store, config, runtime, provider, cognition, recovery, input)
+        }
+    }
+
+    private suspend fun dispatch(
+        op: String, store: LinuxStorage, config: NodeConfig, runtime: LinuxRuntimeBridge,
+        provider: LinuxProviderLifecycle, cognition: LinuxCognitiveTurn,
+        recovery: LinuxRecoverySupport, input: JSONObject,
+    ): JSONObject = when (op) {
             "status" -> JSONObject().put("ok", true)
                  .put("process", "RUNNING")
                 .put("runtime", runtime.engine.state.value.javaClass.simpleName)
@@ -246,6 +274,11 @@ object HaloCli {
                 .put("audio", "NOT_VERIFIED")
                 .put("sync", "DISABLED")
                 .put("node_id", store.getNodeIdentity().nodeId)
+            "node.backup" -> {
+                LinuxNodeSnapshot.create(
+                    java.nio.file.Path.of(input.getString("destination")), store, recovery
+                )
+            }
             "agent.backup" -> {
                 val destination = java.nio.file.Path.of(input.getString("destination"))
                 recovery.backup(destination)
@@ -308,5 +341,4 @@ object HaloCli {
             }
             else -> JSONObject().put("ok", false).put("error", "Unsupported operation")
         }
-    }
 }

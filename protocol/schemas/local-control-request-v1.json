@@ -20,7 +20,8 @@
         "memory.delete",
         "storage.check",
         "storage.backup",
-        "agent.backup"
+        "agent.backup",
+        "node.backup"
       ]
     },
     "text": {

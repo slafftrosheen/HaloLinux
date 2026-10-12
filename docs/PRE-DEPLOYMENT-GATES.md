@@ -73,3 +73,22 @@ build omits this experimental integration. No automatic agent actions are enable
 **Backup warning:** the existing main storage backup command does **not** back up
 the separate `canonical-agent-runs.db`. Both private databases need a
 coordinated backup/recovery plan. See `docs/CANONICAL-AGENT-STORE.md`.
+
+## Full-node private backup (HALO-LINUX-022)
+
+After the daemon is running, create a private snapshot directory parent
+(`mkdir -m 700 ~/halo-backups`), then use:
+
+```bash
+halo-node node backup "$HOME/halo-backups/snapshot-001"
+```
+
+The operation holds the daemon's write gate, so user text turns and memory
+mutations cannot straddle the two SQLite online snapshots. It creates a
+*new* 0700 directory, 0600 snapshots, and a SHA-256 manifest. The optional
+canonical agent journal is included only when linked.
+
+**This is not encrypted** and does not provide a cross-process database
+transaction, a backup of installed model binaries, or a complete external
+restore test. Store the snapshot on trusted encrypted storage. Never publish
+the folder or its private node identity to GitHub.
