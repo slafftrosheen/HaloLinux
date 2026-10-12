@@ -30,6 +30,24 @@ class LinuxStorage {
     private lateinit var dbPath: Path
     
 
+    /**
+     * Reject symlink traversal BEFORE createDirectories or SQLite opening.
+     * Halo stores identity private keys under this hierarchy; an existing
+     * redirected path must never be silently followed or chmod'ed.
+     */
+    private fun checkedPrivatePath(path: Path): Path {
+        require(path.isAbsolute) { "Halo storage paths must be absolute" }
+        val normalized = path.normalize()
+        var current = normalized.root ?: throw IllegalArgumentException("Storage root missing")
+        for (part in normalized) {
+            current = current.resolve(part)
+            require(!Files.isSymbolicLink(current)) {
+                "Halo storage path contains a symlink"
+            }
+        }
+        return normalized
+    }
+
     suspend fun initialize(config: LinuxStorageConfig = LinuxStorageConfig()) {
         log.info("Initializing Linux storage...")
         
@@ -42,11 +60,22 @@ class LinuxStorage {
         val xdgCacheHome = config.cacheDir?.let { Paths.get(it) } ?: System.getenv("XDG_CACHE_HOME")?.let { Paths.get(it) } 
             ?: home.resolve(".cache")
         
-        dataDir = if (config.dataDir == null) xdgDataHome.resolve("halo-linux") else xdgDataHome
-        configDir = if (config.configDir == null) xdgConfigHome.resolve("halo-linux") else xdgConfigHome
-        cacheDir = if (config.cacheDir == null) xdgCacheHome.resolve("halo-linux") else xdgCacheHome
-        dbPath = dataDir.resolve("halo.db")
-        
+        dataDir = checkedPrivatePath(
+            if (config.dataDir == null) xdgDataHome.resolve("halo-linux") else xdgDataHome
+        )
+        configDir = checkedPrivatePath(
+            if (config.configDir == null) xdgConfigHome.resolve("halo-linux") else xdgConfigHome
+        )
+        cacheDir = checkedPrivatePath(
+            if (config.cacheDir == null) xdgCacheHome.resolve("halo-linux") else xdgCacheHome
+        )
+        dbPath = checkedPrivatePath(dataDir.resolve("halo.db"))
+        val dataChildren = listOf("conversations", "memories", "documents", "models", "attachments")
+            .map { checkedPrivatePath(dataDir.resolve(it)) }
+        val cacheChildren = listOf("inference", "audio")
+            .map { checkedPrivatePath(cacheDir.resolve(it)) }
+
+        // Never chmod a redirected existing file/directory.
         // Create directories
         Files.createDirectories(dataDir)
         Files.createDirectories(configDir)
@@ -60,18 +89,11 @@ class LinuxStorage {
         for (dir in listOf(dataDir, configDir, cacheDir)) {
             Files.setPosixFilePermissions(dir, ownerOnly)
         }
-        Files.createDirectories(dataDir.resolve("conversations"))
-        Files.createDirectories(dataDir.resolve("memories"))
-        Files.createDirectories(dataDir.resolve("documents"))
-        Files.createDirectories(dataDir.resolve("models"))
-        Files.createDirectories(dataDir.resolve("attachments"))
-        Files.createDirectories(cacheDir.resolve("inference"))
-        Files.createDirectories(cacheDir.resolve("audio"))
+        (dataChildren + cacheChildren).forEach(Files::createDirectories)
         // Directory traversal is blocked even if SQLite subsequently creates WAL/SHM files
         // with host-default file permissions.
         (listOf(dataDir, configDir, cacheDir) +
-            listOf("conversations", "memories", "documents", "models", "attachments").map(dataDir::resolve) +
-            listOf("inference", "audio").map(cacheDir::resolve)).forEach { directory ->
+            dataChildren + cacheChildren).forEach { directory ->
             Files.setPosixFilePermissions(directory, setOf(
                 java.nio.file.attribute.PosixFilePermission.OWNER_READ,
                 java.nio.file.attribute.PosixFilePermission.OWNER_WRITE,

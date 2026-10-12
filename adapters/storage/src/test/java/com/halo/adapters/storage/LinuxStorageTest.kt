@@ -208,4 +208,43 @@ class LinuxStorageTest {
         }
     }
 
+    @Test fun symlinkedStorageRootsAndDatabaseFilesAreRejected() = runTest {
+        val outside = tempDir.resolve("outside")
+        java.nio.file.Files.createDirectories(outside)
+        val link = tempDir.resolve("linked-data")
+        java.nio.file.Files.createSymbolicLink(link, outside)
+        val config = tempDir.resolve("config")
+        val cache = tempDir.resolve("cache")
+        assertThrows(IllegalArgumentException::class.java) {
+            kotlinx.coroutines.runBlocking {
+                LinuxStorage().initialize(LinuxStorageConfig(
+                    dataDir=link.toString(), configDir=config.toString(), cacheDir=cache.toString()
+                ))
+            }
+        }
+        assertFalse(java.nio.file.Files.exists(outside.resolve("halo.db")))
+        val real = tempDir.resolve("real")
+        java.nio.file.Files.createDirectories(real)
+        java.nio.file.Files.createSymbolicLink(real.resolve("halo.db"), outside.resolve("unexpected.db"))
+        assertThrows(IllegalArgumentException::class.java) {
+            kotlinx.coroutines.runBlocking {
+                LinuxStorage().initialize(LinuxStorageConfig(
+                    dataDir=real.toString(), configDir=config.toString(), cacheDir=cache.toString()
+                ))
+            }
+        }
+        assertFalse(java.nio.file.Files.exists(outside.resolve("unexpected.db")))
+    }
+
+    @Test fun relativeStorageRootsFailBeforeAnyDatabaseCreation() = runTest {
+        assertThrows(IllegalArgumentException::class.java) {
+            kotlinx.coroutines.runBlocking {
+                LinuxStorage().initialize(LinuxStorageConfig(
+                    dataDir="relative-private-data", configDir=tempDir.resolve("config").toString(),
+                    cacheDir=tempDir.resolve("cache").toString()
+                ))
+            }
+        }
+    }
+
 }
