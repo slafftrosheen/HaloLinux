@@ -75,8 +75,8 @@ object HaloCli {
                 println(request(JSONObject().put("op", "status")).toString(2)); 0
             }
             "ask" -> {
-                val question = args.drop(1).joinToString(" ").trim()
-                if (question.isEmpty()) throw IllegalArgumentException("Provide a question")
+                val question = questionFromArguments(args.drop(1))
+                require(question.isNotEmpty()) { "Provide a question" }
                 val reply = request(JSONObject().put("op", "ask").put("text", question))
                 println(reply.getString("text"))
                 if (reply.optString("canonical_journal_state") == "NEEDS_RECONCILIATION") {
@@ -146,7 +146,7 @@ object HaloCli {
                 println(reply.toString(2)); 0
             }
             else -> {
-                System.err.println("Usage: halo-node [--version|doctor|config show|start|status|ask <text>|memory add <text>|memory search <query>|memory delete <id>|agent recovery|node backup <absolute-private-folder>|storage check|storage backup <absolute-path>]")
+                System.err.println("Usage: halo-node [--version|doctor|config show|start|status|ask <text-or->|memory add <text>|memory search <query>|memory delete <id>|agent recovery|node backup <absolute-private-folder>|storage check|storage backup <absolute-path>]")
                 2
             }
         }
@@ -158,6 +158,26 @@ object HaloCli {
     } catch (e: Exception) {
         // Never print exception stack traces that could include secret-bearing URLs.
         System.err.println("Halo node error: ${e.javaClass.simpleName}. Check configuration and daemon status."); 1
+    }
+
+    /** Use 'halo-node ask -' to avoid exposing private prompts in shell argv. */
+    internal fun questionFromArguments(
+        values: List<String>, input: java.io.InputStream = System.`in`,
+    ): String {
+        val raw = if (values.size == 1 && values[0] == "-") {
+            val bytes = input.readNBytes(96 * 1024 + 1)
+            require(bytes.size <= 96 * 1024) { "Question exceeds stdin limit" }
+            bytes.toString(Charsets.UTF_8)
+        } else {
+            values.joinToString(" ")
+        }
+        val text = raw.trim()
+        require(text.length <= 32_000) { "Question exceeds 32,000 characters" }
+        require(org.json.JSONObject().put("text", text)
+            .toString().toByteArray(Charsets.UTF_8).size < 120 * 1024) {
+            "Question exceeds local request limit"
+        }
+        return text
     }
 
     private fun doctor() {
