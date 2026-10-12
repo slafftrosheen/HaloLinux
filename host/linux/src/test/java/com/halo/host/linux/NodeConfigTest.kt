@@ -75,19 +75,19 @@ class NodeConfigTest {
 
     @Test fun partialProviderConfigurationFailsInsteadOfSilentlyDisablingInference() {
         assertThrows(IllegalArgumentException::class.java) {
-            NodeConfiguration.parse("inference:\\n  endpoint: https://example.org/v1", home)
+            NodeConfiguration.parse("inference:\n  endpoint: https://example.org/v1", home)
         }
         assertThrows(IllegalArgumentException::class.java) {
-            NodeConfiguration.parse("inference:\\n  model: installed-model", home)
+            NodeConfiguration.parse("inference:\n  model: installed-model", home)
         }
     }
 
     @Test fun relativeStoragePathCannotMoveDataBetweenDesktopAndSystemd() {
         assertThrows(IllegalArgumentException::class.java) {
-            NodeConfiguration.parse("storage:\\n  data_dir: halo-data", home)
+            NodeConfiguration.parse("storage:\n  data_dir: halo-data", home)
         }
         val config = NodeConfiguration.parse(
-            "storage:\\n  data_dir: ~/halo-data/../halo-data", home
+            "storage:\n  data_dir: ~/halo-data/../halo-data", home
         )
         assertEquals(home.resolve("halo-data").toString(), config.dataDir)
     }
