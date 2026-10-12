@@ -11,6 +11,13 @@ interface LinuxRecoverySupport : AutoCloseable {
     /** Called exactly once after the daemon lock is held. */
     suspend fun prepare() = Unit
     suspend fun inspect(): JSONObject
+    /** Optional, local-only durable text journaling. No tool execution or replay. */
+    suspend fun beginTextTurn(
+        interactionId: String, text: String, providerId: String?, modelId: String?,
+    ): String? = null
+    suspend fun recordTextResponse(runId: String?, response: String) = Unit
+    suspend fun commitTextDelivery(runId: String?, conversationId: String) = Unit
+    suspend fun failTextTurn(runId: String?, reasonCode: String) = Unit
     suspend fun backup(destination: Path): JSONObject =
         throw UnsupportedOperationException("Canonical agent journal is not linked")
 }

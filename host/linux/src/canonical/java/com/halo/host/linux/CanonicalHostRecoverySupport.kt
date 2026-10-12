@@ -3,6 +3,16 @@ package com.halo.host.linux
 import com.halo.linux.agent.CanonicalRecoveryInspector
 import com.halo.linux.agent.SqliteAgentRunStore
 import com.halo.runtime.cognition.agent.DefaultAgentRunCoordinator
+import com.halo.runtime.cognition.agent.AgentRequest
+import com.halo.runtime.cognition.agent.AgentRunId
+import com.halo.runtime.cognition.agent.AgentRunState
+import com.halo.runtime.cognition.agent.AgentStep
+import com.halo.runtime.cognition.agent.AgentStepId
+import com.halo.runtime.cognition.agent.ProviderTurnId
+import com.halo.cognition.language.InteractionId
+import java.time.Instant
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import com.halo.runtime.cognition.agent.RecoveryClassification
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -52,6 +62,76 @@ class CanonicalHostRecoverySupport(dataDir: Path) : LinuxRecoverySupport {
             .put("startup_prepared", prepared)
             .put("automatic_replay", false)
             .put("tool_execution", false)
+    }
+
+    private val textTurns = ConcurrentHashMap<String, String>()
+
+    override suspend fun beginTextTurn(
+        interactionId: String, text: String, providerId: String?, modelId: String?,
+    ): String {
+        check(prepared) { "Canonical coordinator is not prepared" }
+        require(text.isNotBlank() && text.length <= 32_000)
+        val runId = coordinator.start(AgentRequest(InteractionId(interactionId), text))
+        coordinator.transition(runId, AgentRunState.EXECUTING)
+        // A stable provider turn identity is persisted BEFORE inference starts.
+        val turnId = ProviderTurnId(runId.value + ":provider:1")
+        val start = AgentStep.ProviderTurnStarted(
+            id = AgentStepId(UUID.randomUUID().toString()),
+            runId = runId, createdAt = Instant.now(),
+            turnId = turnId,
+            providerId = providerId ?: "unconfigured",
+            modelId = modelId,
+            requestIdentity = interactionId,
+            exposedToolIds = emptySet(),
+            requiredCapabilities = emptySet(),
+            toolUseMode = "NONE",
+            workloadKind = "TEXT",
+        )
+        check(coordinator.recordStep(start)) { "Provider turn already recorded" }
+        textTurns[runId.value] = turnId.value
+        return runId.value
+    }
+
+    override suspend fun recordTextResponse(runId: String?, response: String) {
+        if (runId == null) return
+        val turnId = textTurns[runId] ?: error("Unknown active canonical text turn")
+        val id = AgentRunId(runId)
+        val now = Instant.now()
+        check(coordinator.recordStep(AgentStep.ProviderTurnCompleted(
+            id = AgentStepId(UUID.randomUUID().toString()),
+            runId = id, createdAt = now,
+            turnId = ProviderTurnId(turnId),
+            assistantText = response, toolCalls = emptyList(),
+            finishReason = "stop",
+        ))) { "Provider turn completion already recorded" }
+        check(coordinator.recordStep(AgentStep.ResponseProduced(
+            id = AgentStepId(UUID.randomUUID().toString()),
+            runId = id, createdAt = now,
+            responseId = runId + ":response:1",
+            text = response,
+        ))) { "Response evidence already recorded" }
+    }
+
+    override suspend fun commitTextDelivery(runId: String?, conversationId: String) {
+        if (runId == null) return
+        val id = AgentRunId(runId)
+        // The main SQLite conversation was already committed before this call.
+        check(coordinator.recordStep(AgentStep.ResponseCommitted(
+            id = AgentStepId(UUID.randomUUID().toString()),
+            runId = id, createdAt = Instant.now(),
+            commitId = runId + ":delivery:1",
+            interactionId = conversationId,
+        ))) { "Response delivery already recorded" }
+        coordinator.complete(id)
+        textTurns.remove(runId)
+    }
+
+    override suspend fun failTextTurn(runId: String?, reasonCode: String) {
+        if (runId == null) return
+        require(reasonCode.matches(Regex("[A-Z_]{1,64}")))
+        textTurns.remove(runId)
+        // Do not create new claims or replay the model on a failed turn.
+        coordinator.fail(AgentRunId(runId), reasonCode)
     }
 
     override suspend fun backup(destination: Path): JSONObject {

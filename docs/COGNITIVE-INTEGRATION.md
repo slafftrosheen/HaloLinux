@@ -88,3 +88,18 @@ inserted into prompts, sent over LAN, or exposed as a model tool.
 
 This is a host capability bridge, not a substitute for canonical agent-run
 persistence or tool authorization.
+
+## HALO-LINUX-021A — canonical text-run evidence, opt-in
+
+The standalone Pi build continues to use the local SQLite text-turn checkpoint.
+With pinned canonical cognition enabled, the same text request is also
+registered through the REAL `DefaultAgentRunCoordinator.start()`. Its canonical
+journal records `RunPrepared`, `ProviderTurnStarted` before inference,
+`ProviderTurnCompleted` and `ResponseProduced` before delivering content,
+and `ResponseCommitted` only after the main SQLite conversation is durable.
+Then the canonical coordinator completes the run.
+
+There is no multi-database atomic transaction; failure after the main DB
+commits may leave a canonical run with response evidence but no committed
+delivery record. This is surfaced at startup for classification; **never**
+automatically replay or redeliver the model answer. Tool use stays disabled.

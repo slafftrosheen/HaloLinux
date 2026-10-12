@@ -31,6 +31,7 @@ data class LinuxTextTurnResult(
     val providerId: String,
     val modelId: String?,
     val latencyMs: Long,
+    val agentRunId: String? = null,
 )
 
 /**
@@ -43,28 +44,35 @@ class LinuxCognitiveTurn(
     private val storage: LinuxStorage,
     private val runtime: LinuxRuntimeBridge,
     private val clockNs: () -> Long = System::nanoTime,
+    private val recoverySupport: () -> LinuxRecoverySupport = { DisabledRecoverySupport },
 ) {
     suspend fun ask(text: String): LinuxTextTurnResult {
         require(text.isNotBlank() && text.length <= 32_000)
         val interactionId = UUID.randomUUID().toString()
         val start = clockNs()
+        var agentRunId: String? = null
+        var mainCommitted = false
+        var conversationId: String? = null
         storage.beginTurn(interactionId)
-        runtime.publish(CognitiveRequestStarted(requestId = interactionId, interactionId = interactionId))
-        runtime.publish(LinuxTurnEvent(interactionId = interactionId, stage = LinuxTurnStage.ACCEPTED))
-        try {
+                try {
             storage.markTurn(interactionId, "REASONING")
             val target = provider.snapshot()
+            agentRunId = recoverySupport().beginTextTurn(
+                interactionId, text, target.providerId, target.modelId
+            )
             runtime.publish(CognitiveReasoningStarted(
                 requestId = interactionId, providerId = target.providerId ?: "unconfigured",
                 modelId = target.modelId, interactionId = interactionId
             ))
             runtime.publish(LinuxTurnEvent(interactionId = interactionId, stage = LinuxTurnStage.REASONING))
             val response = provider.generate(text, interactionId)
+            recoverySupport().recordTextResponse(agentRunId, response.text)
             val elapsed = TimeUnit.NANOSECONDS.toMillis(clockNs() - start)
             val now = Instant.now()
-            val conversationId = UUID.randomUUID().toString()
+            val newConversationId = UUID.randomUUID().toString()
+            conversationId = newConversationId
             storage.commitTextTurn(interactionId, ConversationRecord(
-                id = conversationId,
+                id = newConversationId,
                 title = text.take(80),
                 createdAt = now,
                 updatedAt = now,
@@ -72,13 +80,15 @@ class LinuxCognitiveTurn(
                 modelId = response.modelId,
                 metadata = "{}",
                 messages = listOf(
-                    MessageRecord(UUID.randomUUID().toString(), conversationId, "user",
+                    MessageRecord(UUID.randomUUID().toString(), newConversationId, "user",
                         text, null, null, 0L, 0L, now, "{}"),
                     MessageRecord(UUID.randomUUID().toString(), conversationId, "assistant",
                         response.text, response.providerId, response.modelId, 0L, elapsed,
                         Instant.now(), "{}")
                 )
             ))
+            mainCommitted = true
+            recoverySupport().commitTextDelivery(agentRunId, newConversationId)
             runtime.publish(InferenceObserved(
                 requestId = interactionId,
                 providerId = response.providerId,
@@ -87,11 +97,14 @@ class LinuxCognitiveTurn(
                 success = true,
             ))
             runtime.publish(LinuxTurnEvent(interactionId = interactionId, stage = LinuxTurnStage.COMMITTED))
-            return LinuxTextTurnResult(interactionId, conversationId, response.text,
-                response.providerId, response.modelId, elapsed)
+            return LinuxTextTurnResult(interactionId, newConversationId, response.text,
+                response.providerId, response.modelId, elapsed, agentRunId)
         } catch (cancel: CancellationException) {
             withContext(NonCancellable) {
-                runCatching { storage.markTurn(interactionId, "FAILED", failureType = "CANCELLED") }
+                if (!mainCommitted) {
+                    runCatching { storage.markTurn(interactionId, "FAILED", failureType = "CANCELLED") }
+                    runCatching { recoverySupport().failTextTurn(agentRunId, "CANCELLED") }
+                }
                 runtime.publish(InferenceObserved(
                     requestId = interactionId,
                     providerId = provider.snapshot().providerId ?: "unconfigured",
@@ -103,7 +116,10 @@ class LinuxCognitiveTurn(
             }
             throw cancel
         } catch (error: Exception) {
-            runCatching { storage.markTurn(interactionId, "FAILED", failureType = "FAILED") }
+            if (!mainCommitted) {
+                runCatching { storage.markTurn(interactionId, "FAILED", failureType = "FAILED") }
+                runCatching { recoverySupport().failTextTurn(agentRunId, "INFERENCE_FAILED") }
+            }
             runtime.publish(InferenceObserved(
                 requestId = interactionId,
                 providerId = provider.snapshot().providerId ?: "unconfigured",

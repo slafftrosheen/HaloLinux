@@ -168,7 +168,7 @@ object HaloCli {
         val storage = LinuxStorage()
         val runtime = LinuxRuntimeBridge(storage)
         val provider = LinuxProviderLifecycle.create(config)
-        val cognition = LinuxCognitiveTurn(provider, storage, runtime)
+        val cognition = LinuxCognitiveTurn(provider, storage, runtime, recoverySupport = { recovery })
         var recovery: LinuxRecoverySupport = DisabledRecoverySupport
         val server = LocalControlServer(socketPath()) { input ->
             runBlocking { handle(storage, config, runtime, provider, cognition, recovery, input) }
@@ -300,6 +300,7 @@ object HaloCli {
                 JSONObject().put("ok", true).put("text", answer.text)
                     .put("conversation_id", answer.conversationId)
                     .put("interaction_id", answer.interactionId)
+                    .put("agent_run_id", answer.agentRunId ?: JSONObject.NULL)
                     .put("provider_id", answer.providerId)
                     .put("model_id", answer.modelId ?: JSONObject.NULL)
                     .put("latency_ms", answer.latencyMs)
