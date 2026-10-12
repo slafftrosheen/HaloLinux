@@ -56,6 +56,14 @@ The ledger stores identifiers, state, timestamps, an optional conversation ID
 and a sanitized failure category. It deliberately does not store prompts,
 responses, tokens or authorization data. This is a conservative preparation for
 the canonical AgentRunCoordinator, **not** a replacement for durable agent
-planning/recovery. Conversation commits and ledger commits are currently separate
-transactions; a crash in between can leave an INTERRUPTED checkpoint alongside
-a saved conversation. Neither automatic replay nor deletion occurs in that case.
+planning/recovery. HALO-LINUX-013 makes conversation and checkpoint completion a single SQLite
+transaction. If message insertion fails, neither a completed journal record nor
+a partial conversation is committed. The node still never automatically replays
+an interrupted turn.
+
+## HALO-LINUX-013 — atomic completion
+
+`commitTextTurn(interactionId, conversation)` conditionally advances the
+REASONING checkpoint to COMMITTED and inserts user/assistant messages in the
+**same SQLite transaction**. A duplicate commit attempt does not rewrite the
+original answer. Tests cover a real SQLite primary-key violation and rollback.

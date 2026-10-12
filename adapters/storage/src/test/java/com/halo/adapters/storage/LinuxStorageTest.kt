@@ -170,19 +170,20 @@ class LinuxStorageTest {
         val now = Instant.now()
         store.beginTurn("turn-bad")
         store.markTurn("turn-bad", "REASONING")
+        // Two messages with the same PRIMARY KEY cause a real SQLite failure.
+        // Both the conversation INSERT and the COMMITTED state update must roll back.
+        val first = MessageRecord("duplicate-msg", "bad-conversation", "user",
+            "Message one", null, null, 0L, 0L, now, "{}")
         val invalid = ConversationRecord(
             "bad-conversation", "Invalid", now, now, null, null, "{}",
-            listOf(MessageRecord("bad-message", "bad-conversation", "invalid-role", "Hello",
-                null, null, 0L, 0L, now, "{}"))
+            listOf(first, first.copy(content = "Message two"))
         )
-        // A malformed FK/duplicate message must not be allowed to manufacture
-        // a COMMITTED checkpoint. The explicit transition precondition is also tested.
-        val first = invalid.copy(messages = listOf(invalid.messages.first().copy(conversationId="bad-conversation")))
-        store.commitTextTurn("turn-bad", first)
-        assertEquals("COMMITTED", store.getTextTurnState("turn-bad")?.state)
-        assertThrows(IllegalStateException::class.java) {
-            kotlinx.coroutines.runBlocking { store.commitTextTurn("turn-bad", first) }
+        assertThrows(java.sql.SQLException::class.java) {
+            kotlinx.coroutines.runBlocking { store.commitTextTurn("turn-bad", invalid) }
         }
+        assertEquals("REASONING", store.getTextTurnState("turn-bad")?.state)
+        assertNull(store.loadConversation("bad-conversation"))
+        assertEquals(0L, store.checkDatabase().conversationCount)
         store.close()
     }
 
