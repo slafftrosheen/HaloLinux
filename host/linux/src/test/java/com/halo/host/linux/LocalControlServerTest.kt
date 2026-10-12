@@ -163,4 +163,20 @@ class LocalControlServerTest {
         }
     }
 
+    @Test fun concurrentShutdownCallersBothObserveCompletedClose() {
+        val path = tmp.resolve("double-close.sock")
+        val (server, runner) = start(path)
+        val first = Thread { server.close() }
+        val second = Thread { server.close() }
+        first.start()
+        second.start()
+        first.join(3000)
+        second.join(3000)
+        runner.join(3000)
+        assertFalse(first.isAlive)
+        assertFalse(second.isAlive)
+        assertFalse(runner.isAlive)
+        assertFalse(Files.exists(path))
+    }
+
 }

@@ -80,6 +80,9 @@ class LocalControlServer(
     private val handler: (JSONObject) -> JSONObject,
 ) : AutoCloseable {
     private val closed = AtomicBoolean(false)
+    // A second close() caller must wait for the first caller to finish
+    // draining active workers before the daemon tears down SQLite.
+    private val closeComplete = java.util.concurrent.CountDownLatch(1)
     private val clients = ThreadPoolExecutor(
         4, 4, 0, TimeUnit.MILLISECONDS, ArrayBlockingQueue(16)
     ) { task -> Thread(task, "halo-local-request").apply { isDaemon = true } }
@@ -181,28 +184,35 @@ class LocalControlServer(
     }
 
     override fun close() {
-        if (!closed.compareAndSet(false, true)) return
-        runCatching { server?.close() }
-        // Closing sockets unblocks parked readers and writers. Interrupting
-        // workers then requests cancellation of any running coroutines.
-        acceptedClients.forEach { runCatching { it.close() } }
-        clients.shutdownNow()
-        deadlines.shutdownNow()
-        try {
-            // The systemd user unit has a 30-second stop deadline. Allow a
-            // bounded drain; never block the shutdown hook indefinitely.
-            if (!clients.awaitTermination(10, TimeUnit.SECONDS)) {
-                System.err.println("Halo node: active request did not drain before shutdown")
+        if (!closed.compareAndSet(false, true)) {
+            try {
+                closeComplete.await(12, TimeUnit.SECONDS)
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
             }
-        } catch (_: InterruptedException) {
-            Thread.currentThread().interrupt()
+            return
         }
-        if (lock != null) {
-            // Only the owner of the lock may remove the named socket.
-            runCatching { Files.deleteIfExists(path) }
+        try {
+            runCatching { server?.close() }
+            acceptedClients.forEach { runCatching { it.close() } }
+            clients.shutdownNow()
+            deadlines.shutdownNow()
+            try {
+                // systemd has a 30-second stop window; cancel first, then drain.
+                if (!clients.awaitTermination(10, TimeUnit.SECONDS)) {
+                    System.err.println("Halo node: active request did not drain before shutdown")
+                }
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+            }
+            if (lock != null) {
+                runCatching { Files.deleteIfExists(path) }
+            }
+            runCatching { lock?.release() }
+            runCatching { lockChannel?.close() }
+        } finally {
+            closeComplete.countDown()
         }
-        runCatching { lock?.release() }
-        runCatching { lockChannel?.close() }
     }
 
     companion object {
