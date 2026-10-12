@@ -112,12 +112,15 @@ internal object CanonicalAgentJson {
                     .put("toolUseMode", step.toolUseMode).put("workloadKind", step.workloadKind)
             }
             is AgentStep.ProviderTurnCompleted -> {
-                require(step.toolCalls.isEmpty()) {
-                    "Tool-producing provider responses are not recoverable by the Linux text-only adapter"
+                val calls = JSONArray()
+                step.toolCalls.forEach { call ->
+                    calls.put(JSONObject().put("toolCallId", call.toolCallId)
+                        .put("toolName", call.toolName)
+                        .put("argumentsJson", call.argumentsJson))
                 }
                 j.put("turnId", step.turnId.value).put("assistantText", step.assistantText)
                     .put("finishReason", step.finishReason).put("payloadRefId", step.payloadRefId)
-                    .put("toolCalls", JSONArray())
+                    .put("toolCalls", calls)
             }
             is AgentStep.ResponseProduced -> {
                 j.put("responseId", step.responseId).put("text", step.text)
@@ -127,6 +130,64 @@ internal object CanonicalAgentJson {
                 j.put("commitId", step.commitId).put("interactionId", step.interactionId)
             is AgentStep.RecoveryClaimed ->
                 j.put("planKind", step.planKind).put("evidenceStepId", step.evidenceStepId)
+            is AgentStep.PlanCreated -> j.put("planId", step.planId).put("summary", step.summary)
+            is AgentStep.ClarificationRequested ->
+                j.put("question", step.question).put("field", step.field)
+            is AgentStep.ApprovalRequested ->
+                j.put("action", step.action).put("risk", step.risk)
+            is AgentStep.ContextUsed ->
+                j.put("objectIds", JSONArray(step.objectIds))
+                    .put("memoryIds", JSONArray(step.memoryIds))
+            is AgentStep.ContinuityBound -> j.put("conversationId", step.conversationId)
+            is AgentStep.ToolRequested ->
+                j.put("toolCallId", step.toolCallId).put("toolId", step.toolId)
+                    .put("argumentsJson", step.argumentsJson)
+            is AgentStep.ToolDispatched ->
+                j.put("toolCallId", step.toolCallId).put("toolId", step.toolId)
+                    .put("idempotencyKey", step.idempotencyKey)
+            is AgentStep.ToolCompleted ->
+                j.put("toolCallId", step.toolCallId).put("toolId", step.toolId)
+                    .put("resultSummary", step.resultSummary).put("success", step.success)
+                    .put("actionTruth", step.actionTruth.name)
+            is AgentStep.ToolFailed ->
+                j.put("toolCallId", step.toolCallId).put("toolId", step.toolId)
+                    .put("reason", step.reason)
+            is AgentStep.ToolInvocationPrepared ->
+                j.put("invocationId", step.invocationId.value)
+                    .put("toolCallId", step.toolCallId).put("toolId", step.toolId)
+                    .put("argumentsJson", step.argumentsJson)
+                    .put("argumentsDigest", step.argumentsDigest)
+                    .put("idempotencyKey", step.idempotencyKey)
+                    .put("descriptorVersion", step.descriptorVersion)
+                    .put("replaySafety", step.replaySafety)
+            is AgentStep.ToolExecutionClaimed ->
+                j.put("invocationId", step.invocationId.value)
+                    .put("toolCallId", step.toolCallId).put("toolId", step.toolId)
+                    .put("idempotencyKey", step.idempotencyKey)
+                    .put("replaySafety", step.replaySafety)
+            is AgentStep.ResourceBlocked ->
+                j.put("invocationId", step.invocationId.value).put("toolId", step.toolId)
+                    .put("resourceIds", JSONArray(step.resourceIds))
+                    .put("endpointIds", JSONArray(step.endpointIds))
+                    .put("blockingLeaseIds", JSONArray(step.blockingLeaseIds))
+            is AgentStep.ToolOutcomeRecorded ->
+                j.put("invocationId", step.invocationId.value)
+                    .put("toolCallId", step.toolCallId).put("toolId", step.toolId)
+                    .put("success", step.success).put("output", step.output)
+                    .put("actionTruth", step.actionTruth.name)
+                    .put("failureKind", step.failureKind)
+                    .put("payloadRefId", step.payloadRefId)
+                    .put("payloadSha256", step.payloadSha256)
+                    .put("payloadBytes", step.payloadBytes)
+            is AgentStep.ToolRejected ->
+                j.put("toolCallId", step.toolCallId).put("toolId", step.toolId)
+                    .put("reasonCode", step.reasonCode.name)
+                    .put("reason", step.reason).put("retryable", step.retryable)
+                    .put("requiresUserAction", step.requiresUserAction)
+                    .put("modelResult", step.modelResult)
+            is AgentStep.ContinuationPrepared ->
+                j.put("turnId", step.turnId.value).put("messageCount", step.messageCount)
+                    .put("exposedToolIds", putStrings(step.exposedToolIds))
             is AgentStep.InputRequested -> {
                 j.put("requestId", step.requestId.value).put("input", encodeInput(step.input))
             }
@@ -159,12 +220,16 @@ internal object CanonicalAgentJson {
                 j.optionalString("toolUseMode"), j.optionalString("workloadKind")
             )
             "ProviderTurnCompleted" -> {
-                require(j.getJSONArray("toolCalls").length() == 0) {
-                    "Tool response decoding is not enabled on Linux"
+                val items = j.getJSONArray("toolCalls")
+                require(items.length() <= 64) { "Unbounded provider tool call journal" }
+                val calls = (0 until items.length()).map { i ->
+                    val call = items.getJSONObject(i)
+                    ProviderToolCallRecord(call.getString("toolCallId"), call.getString("toolName"),
+                        call.getString("argumentsJson"))
                 }
                 AgentStep.ProviderTurnCompleted(
                     id, runId, created, ProviderTurnId(j.getString("turnId")),
-                    j.getString("assistantText"), emptyList(),
+                    j.getString("assistantText"), calls,
                     j.getString("finishReason"), j.optionalString("payloadRefId")
                 )
             }
@@ -178,6 +243,60 @@ internal object CanonicalAgentJson {
             "RecoveryClaimed" -> AgentStep.RecoveryClaimed(
                 id, runId, created, j.getString("planKind"), j.optionalString("evidenceStepId")
             )
+            "PlanCreated" -> AgentStep.PlanCreated(id, runId, created,
+                j.getString("planId"), j.getString("summary"))
+            "ClarificationRequested" -> AgentStep.ClarificationRequested(id, runId, created,
+                j.getString("question"), j.getString("field"))
+            "ApprovalRequested" -> AgentStep.ApprovalRequested(id, runId, created,
+                j.getString("action"), j.getString("risk"))
+            "ContextUsed" -> AgentStep.ContextUsed(id, runId, created,
+                (0 until j.getJSONArray("objectIds").length()).map { j.getJSONArray("objectIds").getString(it) },
+                (0 until j.getJSONArray("memoryIds").length()).map { j.getJSONArray("memoryIds").getString(it) })
+            "ContinuityBound" -> AgentStep.ContinuityBound(id, runId, created,
+                j.getString("conversationId"))
+            "ToolRequested" -> AgentStep.ToolRequested(id, runId, created,
+                j.getString("toolCallId"), j.getString("toolId"),
+                j.getString("argumentsJson"))
+            "ToolDispatched" -> AgentStep.ToolDispatched(id, runId, created,
+                j.getString("toolCallId"), j.getString("toolId"),
+                j.optionalString("idempotencyKey"))
+            "ToolCompleted" -> AgentStep.ToolCompleted(id, runId, created,
+                j.getString("toolCallId"), j.getString("toolId"),
+                j.getString("resultSummary"), j.getBoolean("success"),
+                ActionTruth.valueOf(j.getString("actionTruth")))
+            "ToolFailed" -> AgentStep.ToolFailed(id, runId, created,
+                j.getString("toolCallId"), j.getString("toolId"), j.getString("reason"))
+            "ToolInvocationPrepared" -> AgentStep.ToolInvocationPrepared(id, runId, created,
+                ToolInvocationId(j.getString("invocationId")),
+                j.getString("toolCallId"), j.getString("toolId"),
+                j.getString("argumentsJson"), j.getString("argumentsDigest"),
+                j.getString("idempotencyKey"), j.getInt("descriptorVersion"),
+                j.getString("replaySafety"))
+            "ToolExecutionClaimed" -> AgentStep.ToolExecutionClaimed(id, runId, created,
+                ToolInvocationId(j.getString("invocationId")),
+                j.getString("toolCallId"), j.getString("toolId"),
+                j.getString("idempotencyKey"), j.getString("replaySafety"))
+            "ResourceBlocked" -> AgentStep.ResourceBlocked(id, runId, created,
+                ToolInvocationId(j.getString("invocationId")), j.getString("toolId"),
+                (0 until j.getJSONArray("resourceIds").length()).map { j.getJSONArray("resourceIds").getString(it) },
+                (0 until j.getJSONArray("endpointIds").length()).map { j.getJSONArray("endpointIds").getString(it) },
+                (0 until j.getJSONArray("blockingLeaseIds").length()).map { j.getJSONArray("blockingLeaseIds").getString(it) })
+            "ToolOutcomeRecorded" -> AgentStep.ToolOutcomeRecorded(id, runId, created,
+                ToolInvocationId(j.getString("invocationId")),
+                j.getString("toolCallId"), j.getString("toolId"),
+                j.getBoolean("success"), j.getString("output"),
+                ActionTruth.valueOf(j.getString("actionTruth")),
+                j.optionalString("failureKind"), j.optionalString("payloadRefId"),
+                j.optionalString("payloadSha256"),
+                if (j.isNull("payloadBytes")) null else j.getLong("payloadBytes"))
+            "ToolRejected" -> AgentStep.ToolRejected(id, runId, created,
+                j.getString("toolCallId"), j.getString("toolId"),
+                ToolRejectionCode.valueOf(j.getString("reasonCode")),
+                j.getString("reason"), j.getBoolean("retryable"),
+                j.getBoolean("requiresUserAction"), j.getString("modelResult"))
+            "ContinuationPrepared" -> AgentStep.ContinuationPrepared(id, runId, created,
+                ProviderTurnId(j.getString("turnId")), j.getInt("messageCount"),
+                j.arrayStrings("exposedToolIds"))
             "InputRequested" -> AgentStep.InputRequested(
                 id, runId, created, AgentInputRequestId(j.getString("requestId")),
                 decodeInput(j.getJSONObject("input"))
