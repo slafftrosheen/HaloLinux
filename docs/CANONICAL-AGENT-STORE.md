@@ -167,3 +167,20 @@ The first durable resolution still wins; approvals never dispatch a tool.
 
 New regression fixtures verify proposed provider tool calls survive journaling
 without granting execution.
+
+## HALO-LINUX-020G — serialized evidence coverage
+
+The v1 codec additionally handles provider tool-call proposals, tool request,
+preparation, dispatch/claim and outcome evidence; resource blocking, typed tool
+rejections, response/continuation records, guard stops, and external-condition
+registration/completion/expiry/cancellation. SQLite enforces a unique
+idempotency key for tool execution claims.
+
+The codec deliberately continues to reject unreviewed, complex semantic-app
+receipts, UI transaction receipts, interaction handoffs, delegated evidence
+records and direct-command authority envelopes. These must be added with
+lossless schema fixtures and stable canonical contracts.
+
+**No storage event triggers a tool executor.** Durable historical evidence is
+necessary for safe recovery classification, never sufficient permission for a
+new external action.

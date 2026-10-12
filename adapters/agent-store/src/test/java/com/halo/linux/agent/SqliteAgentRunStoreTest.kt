@@ -274,4 +274,59 @@ class SqliteAgentRunStoreTest {
         }
     }
 
+    @Test fun runGuardAndExternalConditionRoundTripWithoutSchedulingJobs() = runBlocking {
+        db().use { store ->
+            val runId = AgentRunId("guarded")
+            store.create(run("guarded", AgentRunState.SUSPENDED))
+            val guard = AgentStep.RunGuardTriggered(
+                AgentStepId("guard-stop"), runId, start,
+                RunGuardReason.TOO_MANY_TOOL_ROUNDS, 12,
+                null, "hash-without-content", 1530L, "Tool limit reached"
+            )
+            assertTrue(store.appendStep(guard))
+            assertTrue(store.appendStep(AgentStep.ExternalConditionRegistered(
+                AgentStepId("watch-1"), runId, start,
+                "watch-id", "TIME", "timer-1", "Waiting for an event"
+            )))
+            assertTrue(store.appendStep(AgentStep.ExternalConditionSatisfied(
+                AgentStepId("watch-2"), runId, start,
+                "watch-id", "TIME", "timer-1"
+            )))
+            val records = store.get(runId)!!.steps
+            assertEquals(3, records.size)
+            assertEquals("hash-without-content",
+                (records[0] as AgentStep.RunGuardTriggered).evidenceHash)
+            assertEquals("timer-1",
+                (records[2] as AgentStep.ExternalConditionSatisfied).targetId)
+        }
+    }
+
+    @Test fun providerAndToolOutcomeRetainOriginalActionTruth() = runBlocking {
+        val runId = AgentRunId("outcome")
+        db().use { store ->
+            store.create(run("outcome"))
+            assertTrue(store.appendStep(AgentStep.ToolOutcomeRecorded(
+                AgentStepId("result"), runId, start, ToolInvocationId("inv-2"),
+                "call-2", "external-action", false, "No confirmation",
+                ActionTruth.UNKNOWN, "connection_lost", null, null, null
+            )))
+            val result = store.get(runId)!!.steps.single() as AgentStep.ToolOutcomeRecorded
+            assertEquals(ActionTruth.UNKNOWN, result.actionTruth)
+            assertEquals("connection_lost", result.failureKind)
+        }
+    }
+
+    @Test fun duplicateResponseCommitIdentityCannotBeJournaledTwice() = runBlocking {
+        db().use { store ->
+            store.create(run("committed"))
+            val runId = AgentRunId("committed")
+            val first = AgentStep.ResponseCommitted(
+                AgentStepId("commit-1"), runId, start, "stable-delivery-id", "interaction-1"
+            )
+            assertTrue(store.appendStep(first))
+            assertFalse(store.appendStep(first.copy(id = AgentStepId("commit-2"))))
+            assertEquals(1, store.get(runId)!!.steps.size)
+        }
+    }
+
 }

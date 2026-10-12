@@ -120,3 +120,30 @@ Do not enable tools or auto-replay as a workaround for compile failures.
 - Test execution and optional Gradle compilation **not verified**.
 - `halo-node storage backup` excludes the optional separate agent database.
   Deployment must not treat it as a complete node backup.
+
+## HALO-LINUX-020 — canonical journal and coordinator work
+
+- **020A:** strict v1 codec now stores canonical provider tool-call proposals,
+  invocation/claim evidence, resource blocking, tool outcomes, and typed
+  `ActionTruth`, preserving uncertainty instead of silently treating claims
+  as successful actions.
+- **020B:** SQLite global deduplication of execution-claim idempotency keys and
+  tests for `NEVER_REPLAY` unknown external results.
+- **020C:** the opt-in daemon invokes Halo's actual
+  `DefaultAgentRunCoordinator.prepareOutstandingRunsForRecovery()` once after
+  acquiring the daemon lock. It classifies/normalizes run states; no provider,
+  tool or automatic replay is invoked.
+- **020D:** stored guard decisions and external-condition journal evidence.
+- **020E:** owner-private, no-overwrite consistent SQLite agent journal backups
+  via `halo-node agent backup /absolute/private/path.db`.
+- **020F:** resolution of durable approval/clarification requests requires
+  correct waiting state, matching resolution type, and length/line constraints.
+- **020G:** regression tests for journal truth, response commit dedup, guard
+  events and condition history.
+
+**Important:** optional canonical Gradle compilation and all JUnit test
+execution remain **unverified** in this environment. The default Pi build
+continues to exclude canonical agent cognition. Host-specific semantic/UI
+receipts, complex handoffs and some direct-authority records are still
+unsupported by the strict journal codec and will fail closed. This is not
+yet a complete portable coordinator for user-facing agent execution.

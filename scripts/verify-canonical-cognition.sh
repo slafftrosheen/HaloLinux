@@ -11,7 +11,9 @@ echo "Verifying canonical Halo cognition, Linux SQLite AgentRunStore, and opt-in
   -PhaloCanonicalCognition=true \
   :runtime:cognition:compileKotlin \
   :runtime:cognition:test \
+  :adapters:agent-store:clean \
   :adapters:agent-store:test \
+  :host:linux:clean \
   :host:linux:test \
   :host:linux:shadowJar \
   --no-daemon
