@@ -60,4 +60,26 @@ class LocalControlServerTest {
             LocalControlServer.readFrame(bytes.inputStream())
         }
     }
+    @Test fun duplicateInstanceCannotAcquireLockOrRemoveExistingSocket() {
+        val path = tmp.resolve("locked.sock")
+        val owner = LocalControlServer(path) {
+            JSONObject().put("ok", true)
+        }
+        val contender = LocalControlServer(path) {
+            JSONObject().put("ok", true)
+        }
+        try {
+            owner.acquireInstanceLock()
+            assertThrows(IllegalStateException::class.java) {
+                contender.acquireInstanceLock()
+            }
+            // No socket was opened, and the lock remains owned by the first server.
+            assertFalse(Files.exists(path))
+            assertDoesNotThrow { owner.acquireInstanceLock() }
+        } finally {
+            contender.close()
+            owner.close()
+        }
+    }
+
 }

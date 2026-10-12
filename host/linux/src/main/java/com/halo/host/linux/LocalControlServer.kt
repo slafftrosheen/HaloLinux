@@ -44,7 +44,14 @@ class LocalControlServer(
     private var lockChannel: FileChannel? = null
     private var lock: java.nio.channels.FileLock? = null
 
-    fun serve() {
+    /**
+     * Call before opening SQLite or performing startup recovery. A second process
+     * must never mutate an active daemon's checkpoints during attempted startup.
+     */
+    @Synchronized
+    fun acquireInstanceLock() {
+        check(!closed.get()) { "Control server was closed" }
+        if (lock != null) return
         val parent = path.parent ?: error("Socket requires parent directory")
         Files.createDirectories(parent)
         require(!Files.isSymbolicLink(parent)) { "Socket directory must not be a symlink" }
@@ -60,8 +67,13 @@ class LocalControlServer(
         } catch (_: java.nio.channels.OverlappingFileLockException) { null }
         if (lock == null) {
             lockChannel?.close()
+            lockChannel = null
             error("Halo node is already running")
         }
+    }
+
+    fun serve() {
+        acquireInstanceLock()
         try {
             if (Files.exists(path, LinkOption.NOFOLLOW_LINKS)) {
                 require(!Files.isSymbolicLink(path)) { "Refusing symlinked control socket" }

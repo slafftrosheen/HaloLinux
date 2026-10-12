@@ -145,11 +145,6 @@ object HaloCli {
     private fun serve() {
         val config = NodeConfiguration.load()
         val storage = LinuxStorage()
-        runBlocking {
-            storage.initialize(LinuxStorageConfig(dataDir = config.dataDir))
-            storage.getNodeIdentity()
-            storage.reconcileInterruptedTurns()
-        }
         val runtime = LinuxRuntimeBridge()
         val provider = LinuxProviderLifecycle.create(config)
         val cognition = LinuxCognitiveTurn(provider, storage, runtime)
@@ -159,13 +154,23 @@ object HaloCli {
         val shutdown = Thread { server.close() }
         Runtime.getRuntime().addShutdownHook(shutdown)
         try {
-            runBlocking { runtime.start() }
+            // Own the process before touching persistent state. Only the lock owner
+            // may run checkpoint recovery or load node identity.
+            server.acquireInstanceLock()
+            runBlocking {
+                storage.initialize(LinuxStorageConfig(dataDir = config.dataDir))
+                storage.getNodeIdentity()
+                storage.reconcileInterruptedTurns()
+                runtime.start()
+            }
             println("Halo node runtime initialized (local socket only; no LAN listener)")
             server.serve()
         } finally {
             server.close()
             runBlocking {
-                try { runtime.stop() } finally { try { provider.close() } finally { storage.close() } }
+                try { runtime.stop() } finally {
+                    try { provider.close() } finally { storage.close() }
+                }
             }
             runCatching { Runtime.getRuntime().removeShutdownHook(shutdown) }
         }
