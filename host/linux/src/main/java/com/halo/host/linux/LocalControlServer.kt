@@ -155,7 +155,14 @@ class LocalControlServer(
                 } catch (failure: Exception) {
                     LocalControlErrors.safeResponse(failure)
                 }
-                Channels.newOutputStream(it).write((response.toString() + "\n").toByteArray(Charsets.UTF_8))
+                val encoded = (response.toString() + "\n").toByteArray(Charsets.UTF_8)
+                val bounded = if (encoded.size <= MAX_REQUEST_BYTES) encoded else {
+                    (JSONObject().put("ok", false)
+                        .put("error_code", "RESPONSE_TOO_LARGE")
+                        .put("error", "The local reply exceeded the IPC frame limit.")
+                        .toString() + "\n").toByteArray(Charsets.UTF_8)
+                }
+                Channels.newOutputStream(it).write(bounded)
             }
         } catch (_: Exception) {
             // A malformed/stalled client must not terminate the daemon.
