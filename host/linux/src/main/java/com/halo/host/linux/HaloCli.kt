@@ -165,12 +165,19 @@ object HaloCli {
     }
 
     private suspend fun handle(store: LinuxStorage, config: NodeConfig, runtime: LinuxRuntimeBridge, input: JSONObject): JSONObject {
+        val protocolVersion = input.optInt("protocol_version", -1)
+        if (protocolVersion != 1) {
+            return JSONObject().put("ok", false)
+                .put("error", "Unsupported local control protocol version")
+                .put("supported_version", 1)
+        }
         val op = input.optString("op")
         return when (op) {
             "status" -> JSONObject().put("ok", true)
                  .put("process", "RUNNING")
                 .put("runtime", runtime.engine.state.value.javaClass.simpleName)
                 .put("runtime_health", runtime.engine.health.value.name)
+                .put("control_protocol_version", 1)
                 .put("host", LinuxSystemProbe.snapshot().let { system ->
                     JSONObject().put("architecture", system.architecture)
                         .put("memory_total_bytes", system.memoryTotalBytes ?: JSONObject.NULL)

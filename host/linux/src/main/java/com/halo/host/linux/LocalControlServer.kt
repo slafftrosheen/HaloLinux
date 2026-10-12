@@ -151,7 +151,8 @@ object LocalControlClient {
             try {
                 channel.connect(UnixDomainSocketAddress.of(path))
                 Channels.newOutputStream(channel).write(
-                    (input.toString() + "\n").toByteArray(Charsets.UTF_8)
+                    (JSONObject(input.toString()).put("protocol_version", 1).toString() + "\n")
+                        .toByteArray(Charsets.UTF_8)
                 )
                 val response = LocalControlServer.readFrame(Channels.newInputStream(channel).buffered(8192))
                 val result = JSONObject(response)

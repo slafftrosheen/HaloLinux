@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "HaloLinux local control request v1",
+  "type": "object",
+  "required": [
+    "protocol_version",
+    "op"
+  ],
+  "properties": {
+    "protocol_version": {
+      "const": 1
+    },
+    "op": {
+      "enum": [
+        "status",
+        "ask",
+        "memory.add",
+        "memory.search",
+        "memory.delete",
+        "storage.check",
+        "storage.backup"
+      ]
+    },
+    "text": {
+      "type": "string",
+      "maxLength": 100000
+    },
+    "destination": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false
+}
