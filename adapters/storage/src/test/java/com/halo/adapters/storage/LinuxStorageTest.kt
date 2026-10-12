@@ -143,4 +143,47 @@ class LinuxStorageTest {
         store.close()
     }
 
+    @Test fun completionIsAtomicAndDuplicateCannotClobberResult() = runTest {
+        val store = open()
+        val now = Instant.now()
+        val first = ConversationRecord(
+            "atomic-1", "Atomic", now, now, "fixture", "m1", "{}",
+            listOf(MessageRecord("message-1", "atomic-1", "assistant", "original",
+                "fixture", "m1", 0L, 0L, now, "{}"))
+        )
+        store.beginTurn("turn-atomic")
+        store.markTurn("turn-atomic", "REASONING")
+        store.commitTextTurn("turn-atomic", first)
+        assertEquals("COMMITTED", store.getTextTurnState("turn-atomic")?.state)
+        assertEquals("atomic-1", store.getTextTurnState("turn-atomic")?.conversationId)
+        val altered = first.copy(messages = listOf(first.messages.first().copy(content = "overwritten")))
+        assertThrows(IllegalStateException::class.java) {
+            kotlinx.coroutines.runBlocking { store.commitTextTurn("turn-atomic", altered) }
+        }
+        assertEquals("original", store.loadConversation("atomic-1")?.messages?.first()?.content)
+        assertEquals(1L, store.checkDatabase().conversationCount)
+        store.close()
+    }
+
+    @Test fun failedConversationInsertRollsBackCommitState() = runTest {
+        val store = open()
+        val now = Instant.now()
+        store.beginTurn("turn-bad")
+        store.markTurn("turn-bad", "REASONING")
+        val invalid = ConversationRecord(
+            "bad-conversation", "Invalid", now, now, null, null, "{}",
+            listOf(MessageRecord("bad-message", "bad-conversation", "invalid-role", "Hello",
+                null, null, 0L, 0L, now, "{}"))
+        )
+        // A malformed FK/duplicate message must not be allowed to manufacture
+        // a COMMITTED checkpoint. The explicit transition precondition is also tested.
+        val first = invalid.copy(messages = listOf(invalid.messages.first().copy(conversationId="bad-conversation")))
+        store.commitTextTurn("turn-bad", first)
+        assertEquals("COMMITTED", store.getTextTurnState("turn-bad")?.state)
+        assertThrows(IllegalStateException::class.java) {
+            kotlinx.coroutines.runBlocking { store.commitTextTurn("turn-bad", first) }
+        }
+        store.close()
+    }
+
 }

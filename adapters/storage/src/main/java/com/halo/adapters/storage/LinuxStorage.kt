@@ -175,10 +175,11 @@ class LinuxStorage {
         cacheDir.toAbsolutePath().toString()
     }
 
-    suspend fun storeConversation(conversation: ConversationRecord) = withContext(Dispatchers.IO) {
-        openConnection().use { conn ->
-            conn.setAutoCommit(false)
-            try {
+    /**
+     * Private DB helper shared by independent conversation saves and atomic
+     * cognitive commits. Never exposes an uncommitted answer as completed.
+     */
+    private fun writeConversation(conn: Connection, conversation: ConversationRecord) {
                 conn.prepareStatement("""
                     INSERT INTO conversations (id, title, created_at, updated_at, provider_id, model_id, metadata)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -199,7 +200,7 @@ class LinuxStorage {
                 
                 for (msg in conversation.messages) {
                     conn.prepareStatement("""
-                        INSERT OR REPLACE INTO messages (id, conversation_id, role, content, provider_id, model_id, tokens_used, latency_ms, created_at, metadata)
+                        INSERT INTO messages (id, conversation_id, role, content, provider_id, model_id, tokens_used, latency_ms, created_at, metadata)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """.trimIndent()).use { stmt ->
                         stmt.setString(1, msg.id)
@@ -216,10 +217,73 @@ class LinuxStorage {
                     }
                 }
                 
+    }
+
+    suspend fun storeConversation(conversation: ConversationRecord) = withContext(Dispatchers.IO) {
+        openConnection().use { conn ->
+            conn.autoCommit = false
+            try {
+                writeConversation(conn, conversation)
                 conn.commit()
-            } catch (e: Exception) {
+            } catch (error: Exception) {
                 conn.rollback()
-                throw e
+                throw error
+            } finally {
+                conn.autoCommit = true
+            }
+        }
+    }
+
+    /**
+     * Exactly-once local completion: conversation and journal state advance in
+     * one SQLite transaction, conditional on REASONING. A replay/duplicate
+     * cannot overwrite the original conversation.
+     */
+    suspend fun commitTextTurn(interactionId: String, conversation: ConversationRecord) =
+        withContext(Dispatchers.IO) {
+            require(interactionId.isNotBlank() && interactionId.length <= 128)
+            require(conversation.id.isNotBlank())
+            require(conversation.messages.isNotEmpty())
+            openConnection().use { conn ->
+                conn.autoCommit = false
+                try {
+                    val claimed = conn.prepareStatement("""
+                        UPDATE turn_checkpoints
+                        SET state='COMMITTED', updated_at=?, conversation_id=?, failure_type=NULL
+                        WHERE interaction_id=? AND state='REASONING'
+                    """.trimIndent()).use { statement ->
+                        statement.setString(1, Instant.now().toString())
+                        statement.setString(2, conversation.id)
+                        statement.setString(3, interactionId)
+                        statement.executeUpdate()
+                    }
+                    check(claimed == 1) { "Text turn was already committed or is not reasoning" }
+                    writeConversation(conn, conversation)
+                    conn.commit()
+                } catch (error: Exception) {
+                    conn.rollback()
+                    throw error
+                } finally {
+                    conn.autoCommit = true
+                }
+            }
+        }
+
+    suspend fun getTextTurnState(interactionId: String): TextTurnCheckpoint? = withContext(Dispatchers.IO) {
+        openConnection().use { conn ->
+            conn.prepareStatement("""
+                SELECT interaction_id, state, conversation_id, failure_type
+                FROM turn_checkpoints WHERE interaction_id=?
+            """.trimIndent()).use { statement ->
+                statement.setString(1, interactionId)
+                statement.executeQuery().use { results ->
+                    if (results.next()) TextTurnCheckpoint(
+                        results.getString("interaction_id"),
+                        results.getString("state"),
+                        results.getString("conversation_id"),
+                        results.getString("failure_type"),
+                    ) else null
+                }
             }
         }
     }
@@ -699,3 +763,11 @@ data class StorageHealth(
 )
 
 data class StorageBackupReceipt(val path: String, val bytes: Long)
+
+/** Content-free checkpoint lookup for diagnostics and contract tests. */
+data class TextTurnCheckpoint(
+    val interactionId: String,
+    val state: String,
+    val conversationId: String?,
+    val failureType: String?,
+)

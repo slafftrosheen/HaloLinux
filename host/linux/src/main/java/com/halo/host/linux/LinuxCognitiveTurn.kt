@@ -54,7 +54,7 @@ class LinuxCognitiveTurn(
             val elapsed = TimeUnit.NANOSECONDS.toMillis(clockNs() - start)
             val now = Instant.now()
             val conversationId = UUID.randomUUID().toString()
-            storage.storeConversation(ConversationRecord(
+            storage.commitTextTurn(interactionId, ConversationRecord(
                 id = conversationId,
                 title = text.take(80),
                 createdAt = now,
@@ -70,7 +70,6 @@ class LinuxCognitiveTurn(
                         Instant.now(), "{}")
                 )
             ))
-            storage.markTurn(interactionId, "COMMITTED", conversationId = conversationId)
             runtime.publish(LinuxTurnEvent(interactionId = interactionId, stage = LinuxTurnStage.COMMITTED))
             return LinuxTextTurnResult(interactionId, conversationId, response.text,
                 response.providerId, response.modelId, elapsed)
