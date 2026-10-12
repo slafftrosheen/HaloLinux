@@ -6,6 +6,7 @@ plugins {
 }
 
 dependencies {
+    implementation(project(":libraries:common"))
     implementation(project(":sdk:runtime-sdk"))
     implementation(project(":sdk:provider-sdk"))
     implementation(project(":sdk:host-sdk"))

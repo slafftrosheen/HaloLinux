@@ -1,130 +1,88 @@
 # HaloLinux
 
-Linux host and personal compute node for the Halo Cognitive Runtime. ARM64/x86-64, local-first intelligence, audio, memory and secure device synchronization.
+Linux host and personal compute node for the [Halo Cognitive Runtime](https://github.com/slafftrosheen/Halo).
 
-## Overview
+**Status: early implementation, source committed; build and hardware verification pending.**
+This is not yet a production-ready Linux service. See [implementation status](docs/IMPLEMENTATION-STATUS.md).
 
-HaloLinux is an independent Linux host for the Halo cognitive runtime ecosystem. It provides:
+## Goals
 
-- **Local-first AI inference** via OpenAI-compatible providers (Ollama, llama.cpp, vLLM, etc.)
-- **Persistent memory and conversation storage** with full-text search
-- **Audio diagnostics** for ALSA/PipeWire device enumeration
-- **Node identity and sync foundation** for device-to-device synchronization
-- **systemd integration** for reliable service management
-- **Headless operation** - no desktop environment required
+- Headless Linux host for ARM64 and x86-64
+- Local-first personal notes and search
+- Optional local/remote inference through explicit provider configuration
+- Audio diagnostics followed by actual capture/playback adapters
+- Future encrypted account-free peer synchronization
 
-## Quick Start
+## Source layout
+
+- `host/linux` — Kotlin CLI and Unix-domain socket daemon
+- `adapters/inference` — SDK-backed OpenAI-compatible provider adapter
+- `adapters/storage` — SQLite, FTS5 and local node metadata
+- `adapters/audio` — conservative ALSA/PipeWire diagnostics
+- `sdk/*` — **temporary copied** Halo contracts, not yet shared from canonical repo
+- `runtime/*` — subset and placeholders; **not** the full cognitive runtime
+- `protocol/schemas` — proposed, not yet interoperable sync schemas
+
+## Build (requires JDK 21 and network for dependencies)
 
 ```bash
-# Clone and build
-git clone https://github.com/slafftrosheen/HaloLinux.git
-cd HaloLinux
-./gradlew build
-
-# Run directly
-./gradlew :host:linux:run --args="--version"
-./gradlew :host:linux:run --args="doctor"
-./gradlew :host:linux:run --args="status"
-
-# Or install and run as a service
+./gradlew clean build
+./gradlew :host:linux:shadowJar
 ./scripts/install.sh
-systemctl --user start halo-node
-systemctl --user enable halo-node
 ```
 
-## Requirements
+The build has **not** been verified in the execution environment that produced HALO-LINUX-002.
 
-- **Java 21+** (OpenJDK or Oracle JDK)
-- **Linux** (x86-64 or ARM64)
-- **Gradle 8.8+** (wrapper included)
-- **Optional**: Ollama, llama.cpp server, or other OpenAI-compatible inference endpoint
-- **Optional**: ALSA/PipeWire for audio device support
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                      HaloLinux Node                         │
-├─────────────────────────────────────────────────────────────┤
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐  │
-│  │   CLI       │  │  Daemon     │  │  Management API     │  │
-│  │  Interface  │  │  (systemd)  │  │  (Unix Socket)      │  │
-│  └──────┬──────┘  └──────┬──────┘  └──────────┬──────────┘  │
-│         │                │                    │             │
-│         └────────────────┼────────────────────┘             │
-│                          ▼                                  │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │              Halo Runtime Core                       │   │
-│  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌────────┐  │   │
-│  │  │ Lifecycle│ │ Events   │ │ Cognition│ │Provider│  │   │
-│  │  │ Manager  │ │ Bus      │ │ Engine   │ │ Router │  │   │
-│  │  └──────────┘ └──────────┘ └──────────┘ └────────┘  │   │
-│  └─────────────────────────────────────────────────────┘   │
-│                          │                                  │
-│         ┌────────────────┼────────────────┐                │
-│         ▼                ▼                ▼                │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐        │
-│  │  Inference  │  │   Audio     │  │  Storage    │        │
-│  │  Adapters   │  │  Adapters   │  │  Adapters   │        │
-│  │             │  │             │  │             │        │
-│  │ • Ollama    │  │ • ALSA      │  │ • SQLite    │        │
-│  │ • llama.cpp │  │ • PipeWire  │  │ • FTS5      │        │
-│  │ • vLLM      │  │ • Diagnostics│ │ • Filesystem│        │
-│  │ • OpenAI    │  │             │  │             │        │
-│  └─────────────┘  └─────────────┘  └─────────────┘        │
-└─────────────────────────────────────────────────────────────┘
-```
-
-## Documentation
-
-- [Architecture](docs/ARCHITECTURE.md) - System architecture and design decisions
-- [Portability Audit](docs/PORTABILITY-AUDIT.md) - Analysis of reusable Halo modules
-- [Getting Started](docs/GETTING-STARTED.md) - Detailed setup guide
-- [Pi 5 Setup](docs/PI5-SETUP.md) - Raspberry Pi 5 specific installation
-- [Inference](docs/INFERENCE.md) - Configuring inference providers
-- [Audio](docs/AUDIO.md) - Audio device setup and diagnostics
-- [Sync Protocol](docs/SYNC-PROTOCOL.md) - Device synchronization design
-- [Security](docs/SECURITY.md) - Security model and threat analysis
-- [Roadmap](docs/ROADMAP.md) - Future development plans
-
-## Commands
+## First configuration
 
 ```bash
-halo-node --version          # Show version
-halo-node doctor             # Run diagnostics
-halo-node status             # Show node status
-halo-node start              # Start daemon (foreground)
-halo-node ask "query"        # Ask a question
-halo-node config show        # Show configuration
+mkdir -p ~/.config/halo-linux
+cp config/halo-node.example.yaml ~/.config/halo-linux/config.yaml
+# Edit the model identifier to match a model installed at your endpoint.
 ```
 
-## Configuration
+For endpoints requiring an API key, set `HALO_INFERENCE_API_KEY` securely in the process environment.
+Do **not** put the key in YAML or check it into Git.
 
-Configuration file location (in order of precedence):
-1. `$HALO_NODE_CONFIG/config.yaml`
-2. `~/.config/halo-linux/config.yaml`
-3. `/etc/halo-linux/config.yaml`
+The application never selects a remote provider automatically.
 
-Example configuration:
-```yaml
-node:
-  display_name: "My Halo Node"
-  
-inference:
-  provider: "ollama-local"
-  endpoint: "http://localhost:11434/v1"
-  model: "llama3.1:8b"
-  
-storage:
-  data_dir: "~/.local/share/halo-linux"
-  
-audio:
-  enabled: true
-  
-sync:
-  enabled: false
+## Start
+
+```bash
+~/.local/bin/halo-node doctor
+~/.local/bin/halo-node start
 ```
+
+In a second terminal:
+
+```bash
+~/.local/bin/halo-node status
+~/.local/bin/halo-node memory add "My personal offline test note"
+~/.local/bin/halo-node memory search "offline"
+~/.local/bin/halo-node ask "What is Halo?"
+```
+
+Inference requires an explicitly configured endpoint and model. Memory operations do not.
+
+```bash
+systemctl --user start halo-node
+systemctl --user status halo-node
+systemctl --user stop halo-node
+```
+
+For an always-on headless Pi, user lingering may need explicit configuration.
+
+## Safety and limitations
+
+Only the current local user can access the Unix socket through its protected directory.
+The service does not expose a LAN API. Private node identity is stored in the local XDG data directory.
+Peer authentication, encryption and synchronization are **not implemented**.
+
+The committed source is not proof of a working Raspberry Pi deployment. Hardware, storage corruption recovery, executable packaging, SQLite round-trip tests and daemon lifecycle still require actual testing.
+
+See [portability audit](docs/PORTABILITY-AUDIT.md), [security](docs/SECURITY.md), [Pi setup](docs/PI5-SETUP.md) and [implementation status](docs/IMPLEMENTATION-STATUS.md).
 
 ## License
 
-Apache-2.0 (pending verification of upstream Halo licensing)
+The licensing and provenance of copied Halo SDK material require review.
+No blanket new license is asserted for that imported source.
