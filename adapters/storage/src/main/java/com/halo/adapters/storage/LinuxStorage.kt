@@ -89,7 +89,7 @@ class LinuxStorage {
         for (dir in listOf(dataDir, configDir, cacheDir)) {
             Files.setPosixFilePermissions(dir, ownerOnly)
         }
-        (dataChildren + cacheChildren).forEach(Files::createDirectories)
+        (dataChildren + cacheChildren).forEach { Files.createDirectories(it) }
         // Directory traversal is blocked even if SQLite subsequently creates WAL/SHM files
         // with host-default file permissions.
         (listOf(dataDir, configDir, cacheDir) +

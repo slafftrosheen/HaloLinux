@@ -124,4 +124,24 @@ class LocalControlServerTest {
         assertFalse(runner.isAlive)
     }
 
+    @Test fun rejectsInvalidUtf8RatherThanReplacingBytes() {
+        val malformed = byteArrayOf(0xC3.toByte(), 0x28, 0x0A)
+        assertThrows(IllegalArgumentException::class.java) {
+            LocalControlServer.readFrame(malformed.inputStream())
+        }
+    }
+
+    @Test fun oversizedClientRequestIsRejectedBeforeWritingSocketData() {
+        val path = tmp.resolve("client-limit.sock")
+        val (server, runner) = start(path)
+        try {
+            val failure = assertThrows(LocalControlFailure::class.java) {
+                LocalControlClient.exchange(
+                    path, JSONObject().put("text", "large".repeat(40_000))
+                )
+            }
+            assertEquals("REQUEST_TOO_LARGE", failure.code)
+        } finally { server.close(); runner.join(2000) }
+    }
+
 }

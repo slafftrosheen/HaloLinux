@@ -194,7 +194,16 @@ class LocalControlServer(
             while (bytes.size() <= MAX_REQUEST_BYTES) {
                 val value = input.read()
                 if (value < 0) throw IllegalArgumentException("Incomplete control frame")
-                if (value == 10) return bytes.toString(Charsets.UTF_8)
+                if (value == 10) {
+                    try {
+                        return Charsets.UTF_8.newDecoder()
+                            .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+                            .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
+                            .decode(java.nio.ByteBuffer.wrap(bytes.toByteArray())).toString()
+                    } catch (_: java.nio.charset.CharacterCodingException) {
+                        throw IllegalArgumentException("Invalid UTF-8 control frame")
+                    }
+                }
                 bytes.write(value)
             }
             throw IllegalArgumentException("Control frame exceeds maximum size")
@@ -215,10 +224,15 @@ object LocalControlClient {
             )
             try {
                 channel.connect(UnixDomainSocketAddress.of(path))
-                Channels.newOutputStream(channel).write(
+                val encodedRequest =
                     (JSONObject(input.toString()).put("protocol_version", 1).toString() + "\n")
                         .toByteArray(Charsets.UTF_8)
-                )
+                if (encodedRequest.size > LocalControlServer.MAX_REQUEST_BYTES) {
+                    throw LocalControlFailure(
+                        "REQUEST_TOO_LARGE", "The local request exceeds the IPC frame limit."
+                    )
+                }
+                Channels.newOutputStream(channel).write(encodedRequest)
                 val response = LocalControlServer.readFrame(Channels.newInputStream(channel).buffered(8192))
                 val result = JSONObject(response)
                 if (!result.optBoolean("ok")) {
