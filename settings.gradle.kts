@@ -24,5 +24,5 @@ if (providers.gradleProperty("haloCanonicalCognition").orNull == "true") {
     require(providers.gradleProperty("haloCanonicalRoot").isPresent) {
         "haloCanonicalCognition=true requires -PhaloCanonicalRoot=/path/to/pinned/Halo"
     }
-    include(":runtime:cognition")
+    include(":runtime:cognition", ":adapters:agent-store")
 }
