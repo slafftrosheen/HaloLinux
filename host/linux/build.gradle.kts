@@ -22,6 +22,7 @@ dependencies {
     implementation("org.slf4j:slf4j-api:2.0.13")
     implementation("org.yaml:snakeyaml:2.3")
     implementation("org.json:json:20240303")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("ch.qos.logback:logback-classic:1.5.6")
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
     testImplementation("org.junit.jupiter:junit-jupiter-params:5.10.2")
