@@ -38,3 +38,22 @@ source API: no missing project references and no cycles. An offline equivalent
 is provided by `python3 scripts/check-module-graph.py`.
 
 This is *not* JVM compilation evidence and cannot establish ARM64 JNI support.
+
+## HALO-LINUX-008–012 changes (source integrated, build not yet executed)
+
+- SDK-grounded text-only cognitive turn with content-free event bus signals.
+- Process-scoped model provider, explicit `provider check`, no hidden fallback.
+- Provider activity/failure diagnostics and bounded one-at-a-time generation.
+- Optional SHA-pinned canonical Halo source mode for six portable source modules.
+- SQLite v3 content-free turn checkpoint journal with conservative restart classification.
+- Single-instance lock acquired *before* any database mutation or recovery.
+- Safe, actionable local provider errors and model-free smoke assertions.
+- JUnit coverage for fixture turns, provider failure/tool-call rejection and checkpoints.
+
+**Do not claim full AgentRunCoordinator portability or shared artifact publication.**
+`-PhaloCanonicalRoot` allows direct canonical-source compilation but has not
+yet been tested with latest canonical SDK, and vendored SDK snapshots remain
+the default standalone build.
+
+Physical Pi 5/Trixie, JVM builds, JNI, memory pressure and actual provider
+calls still require executed acceptance evidence.

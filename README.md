@@ -118,3 +118,23 @@ See [portability audit](docs/PORTABILITY-AUDIT.md), [security](docs/SECURITY.md)
 
 The licensing and provenance of copied Halo SDK material require review.
 No blanket new license is asserted for that imported source.
+
+## Cognition and providers — experimental
+
+```bash
+halo-node status
+halo-node provider check
+halo-node ask "Explain HaloLinux in one sentence"
+```
+
+The provider is process-scoped. There is no automatic fallback to a remote
+service, and no tool/shell execution. Text turns use Halo SDK contracts,
+record content-free stage events, and keep conservative interrupted-turn
+checkpoints so a crash does not automatically re-run inference.
+
+For optional source-of-truth SDK integration against the pinned Android Halo
+revision, see [Canonical SDK build](docs/CANONICAL-SDK-BUILD.md). This is a
+portability development path, **not yet a verified shared binary publication**.
+
+See [cognitive integration](docs/COGNITIVE-INTEGRATION.md) for what's wired
+and what still requires the canonical agent/recovery modules.

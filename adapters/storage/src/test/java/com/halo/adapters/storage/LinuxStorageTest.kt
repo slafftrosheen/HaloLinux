@@ -134,4 +134,13 @@ class LinuxStorageTest {
         store.close()
     }
 
+    @Test fun acceptedTurnMayFailWithoutEnteringReasoning() = runTest {
+        val store = open()
+        store.beginTurn("provider-not-ready")
+        store.markTurn("provider-not-ready", "FAILED", failureType = "PROVIDER_UNAVAILABLE")
+        assertEquals(0, store.reconcileInterruptedTurns())
+        assertEquals(0L, store.countInterruptedTurns())
+        store.close()
+    }
+
 }

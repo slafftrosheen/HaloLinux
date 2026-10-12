@@ -480,19 +480,20 @@ class LinuxStorage {
         withContext(Dispatchers.IO) {
             require(state in setOf("REASONING", "COMMITTED", "FAILED")) { "Invalid checkpoint transition" }
             require(failureType == null || failureType.matches(Regex("[A-Z_]{1,64}"))) { "Invalid failure type" }
-            val from = if (state == "REASONING") "ACCEPTED" else "REASONING"
+            val allowedPrevious = if (state == "FAILED") setOf("ACCEPTED", "REASONING")
+                else if (state == "REASONING") setOf("ACCEPTED") else setOf("REASONING")
             openConnection().use { conn ->
+                val placeholders = allowedPrevious.joinToString(",") { "'$it'" }
                 conn.prepareStatement("""
                     UPDATE turn_checkpoints
                     SET state=?, updated_at=?, conversation_id=?, failure_type=?
-                    WHERE interaction_id=? AND state=?
+                    WHERE interaction_id=? AND state IN ($placeholders)
                 """.trimIndent()).use { stmt ->
                     stmt.setString(1, state)
                     stmt.setString(2, Instant.now().toString())
                     stmt.setString(3, conversationId)
                     stmt.setString(4, failureType)
                     stmt.setString(5, interactionId)
-                    stmt.setString(6, from)
                     check(stmt.executeUpdate() == 1) { "Invalid or duplicate turn transition" }
                 }
             }
