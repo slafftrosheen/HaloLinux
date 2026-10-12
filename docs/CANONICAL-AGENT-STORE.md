@@ -125,3 +125,20 @@ does not resume work.
 
 A host-only regression test for this behavior is under
 `host/linux/src/canonicalTest` and runs with the opt-in verification script.
+
+## HALO-LINUX-020C — canonical coordinator at startup
+
+The experimental host now constructs the real
+`DefaultAgentRunCoordinator(store, scope)` and calls
+`prepareOutstandingRunsForRecovery()` **once**, after acquiring the local
+daemon instance lock. That canonical operation can update durable run states:
+e.g. nonresumable/unknown external work becomes `INTERRUPTED`, pending
+approval retains a waiting state, and resumable work remains `SUSPENDED`.
+It does NOT execute actions, call the provider, or retry generation.
+
+`halo-node agent recovery` returns both remaining nonterminal planner counts
+and the *startup classification categories*. If the journal contains an
+unsupported version, daemon initialization fails closed. It does not discard
+or silently convert the unsupported evidence.
+
+Automatic resume and manual resume remain unavailable on this Linux host.

@@ -141,7 +141,7 @@ class SqliteAgentRunStoreTest {
         val prepared = AgentStep.ToolInvocationPrepared(
             AgentStepId("prepared"), id, start,
             ToolInvocationId("inv-1"), "call-1", "unknown-device-action",
-            "{\\"power\\":true}", "digest", "key-1", 1, "NEVER_REPLAY"
+            """{"power":true}""", "digest", "key-1", 1, "NEVER_REPLAY"
         )
         val claim = AgentStep.ToolExecutionClaimed(
             AgentStepId("claimed"), id, start,

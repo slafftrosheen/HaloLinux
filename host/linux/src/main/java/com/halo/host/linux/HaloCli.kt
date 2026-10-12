@@ -177,7 +177,9 @@ object HaloCli {
                 recovery = LinuxRecoverySupportFactory.open(
                     java.nio.file.Path.of(storage.getDataDirectory())
                 )
-                // Validate persisted agent journal schema before reporting READY.
+                // The canonical coordinator classifies interrupted runs once,
+                // without resuming providers or executing tools.
+                recovery.prepare()
                 recovery.inspect()
                 runtime.start()
             }

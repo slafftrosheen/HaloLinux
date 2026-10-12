@@ -8,6 +8,8 @@ import org.json.JSONObject
  * canonical module adds classification only, never autonomous resumption.
  */
 interface LinuxRecoverySupport : AutoCloseable {
+    /** Called exactly once after the daemon lock is held. */
+    suspend fun prepare() = Unit
     suspend fun inspect(): JSONObject
 }
 

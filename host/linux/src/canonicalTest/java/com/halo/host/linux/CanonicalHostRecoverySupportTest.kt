@@ -29,11 +29,18 @@ class CanonicalHostRecoverySupportTest {
                     updatedAt = now,
                 ))
             }
+            adapter.prepare()
             val status = adapter.inspect()
             assertEquals("CLASSIFICATION_ONLY", status.getString("state"))
-            assertEquals(1, status.getInt("candidate_count"))
-            assertEquals(1, status.getJSONObject("plan_classes")
-                .getInt("UnsupportedLegacyState"))
+            assertEquals(0, status.getInt("candidate_count"))
+            assertEquals(1, status.getJSONObject("startup_classifications")
+                .getInt("Unrecoverable"))
+            SqliteAgentRunStore(temp.resolve("canonical-agent-runs.db")).use { reopened ->
+                assertEquals(AgentRunState.INTERRUPTED,
+                    reopened.get(AgentRunId("unfinished-run"))?.state)
+            }
+            assertEquals("canonical", status.getString("coordinator"))
+            assertTrue(status.getBoolean("startup_prepared"))
             assertFalse(status.getBoolean("automatic_replay"))
             assertFalse(status.getBoolean("tool_execution"))
             assertFalse(status.toString().contains("Private content"))
