@@ -72,6 +72,14 @@ class LinuxCognitiveTurn(
             ))
             runtime.publish(LinuxTurnEvent(interactionId = interactionId, stage = LinuxTurnStage.REASONING))
             val response = provider.generate(text, interactionId)
+            // Check the JSON-encoded payload size, not just String.length:
+            // control characters can expand substantially when escaped.
+            // Leave headroom for the control envelope, model metadata and IDs.
+            val encodedAnswerBytes = org.json.JSONObject().put("text", response.text)
+                .toString().toByteArray(Charsets.UTF_8).size
+            require(encodedAnswerBytes <= 96 * 1024) {
+                "Model response exceeds the supported local control envelope"
+            }
             recoverySupport().recordTextResponse(agentRunId, response.text)
             val elapsed = TimeUnit.NANOSECONDS.toMillis(clockNs() - start)
             val now = Instant.now()
