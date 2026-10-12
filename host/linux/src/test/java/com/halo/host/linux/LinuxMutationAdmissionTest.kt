@@ -34,6 +34,8 @@ class LinuxMutationAdmissionTest {
             release.complete(Unit)
             assertEquals("committed", withTimeout(1000) { first.await() })
         }
+        // A rejected queued request must never strand the gate.
+        assertEquals("next", withTimeout(1000) { gate.execute { "next" } })
     }
 
     @Test fun admittedWriteIsNotCancelledByAdmissionTimeout() = runBlocking {

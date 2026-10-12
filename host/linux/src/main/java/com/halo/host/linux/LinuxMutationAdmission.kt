@@ -16,14 +16,20 @@ internal class LinuxMutationAdmission(private val waitMs: Long = 5_000) {
     init { require(waitMs > 0) }
 
     suspend fun <T : Any> execute(block: suspend () -> T): T? {
-        val acquired = withTimeoutOrNull(waitMs) {
-            gate.lock()
-            true
-        } ?: return null
+        var locked = false
         try {
+            // withTimeoutOrNull can return null just after lock() completes.
+            // Track ownership outside its body so that cancellation cannot
+            // leak the mutex in this narrow acquire/timeout race.
+            val admitted = withTimeoutOrNull(waitMs) {
+                gate.lock()
+                locked = true
+                true
+            } ?: return null
+            check(admitted)
             return block()
         } finally {
-            if (acquired) gate.unlock()
+            if (locked) gate.unlock()
         }
     }
 }
