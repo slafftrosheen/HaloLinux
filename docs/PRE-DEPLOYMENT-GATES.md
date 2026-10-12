@@ -92,3 +92,12 @@ canonical agent journal is included only when linked.
 transaction, a backup of installed model binaries, or a complete external
 restore test. Store the snapshot on trusted encrypted storage. Never publish
 the folder or its private node identity to GitHub.
+
+## HALO-LINUX-025 — backup contents verification
+
+`scripts/verify-node-snapshot.py` additionally checks that the manifest's
+node ID matches the backed-up SQLite `node_identity` row, that the public and
+private identity keys are present, and (when enabled) that the agent journal
+uses the supported v1 schema and expected tables. Extra files in the
+snapshot directory are rejected. These checks verify **internal consistency**,
+not that the backup is authentic, encrypted, or safe to restore over live data.

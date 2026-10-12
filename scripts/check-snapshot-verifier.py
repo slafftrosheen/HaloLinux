@@ -22,6 +22,12 @@ class SnapshotVerifyTest(unittest.TestCase):
         with sqlite3.connect(db) as con:
             con.execute("CREATE TABLE example(id TEXT)")
             con.execute("INSERT INTO example VALUES('private')")
+            con.execute("CREATE TABLE node_identity(key TEXT PRIMARY KEY,value TEXT)")
+            con.executemany("INSERT INTO node_identity VALUES(?,?)", [
+                ("node_id", "fixture"),
+                ("public_key", "fixture-public"),
+                ("private_key", "fixture-private"),
+            ])
         db.chmod(0o600)
         checksum = hashlib.sha256(db.read_bytes()).hexdigest()
         doc = {
@@ -59,6 +65,39 @@ class SnapshotVerifyTest(unittest.TestCase):
             alias.symlink_to(folder, target_is_directory=True)
             with self.assertRaises(ValueError):
                 module.verify(alias)
+
+    def test_manifest_identity_swap_rejected(self):
+        with tempfile.TemporaryDirectory() as temp:
+            folder = Path(temp) / "set"
+            self.make_snapshot(folder)
+            manifest = folder / "manifest.json"
+            data = json.loads(manifest.read_text())
+            data["node_id"] = "different-node"
+            manifest.write_text(json.dumps(data))
+            with self.assertRaises(ValueError):
+                module.verify(folder)
+
+    def test_missing_private_node_identity_rejected(self):
+        with tempfile.TemporaryDirectory() as temp:
+            folder = Path(temp) / "set"
+            main = self.make_snapshot(folder)
+            with sqlite3.connect(main) as db:
+                db.execute("DELETE FROM node_identity WHERE key='private_key'")
+            manifest = folder / "manifest.json"
+            data = json.loads(manifest.read_text())
+            data["files"][0]["bytes"] = main.stat().st_size
+            data["files"][0]["sha256"] = hashlib.sha256(main.read_bytes()).hexdigest()
+            manifest.write_text(json.dumps(data))
+            with self.assertRaises(ValueError):
+                module.verify(folder)
+
+    def test_unexpected_extra_file_rejected(self):
+        with tempfile.TemporaryDirectory() as temp:
+            folder = Path(temp) / "set"
+            self.make_snapshot(folder)
+            (folder / "unexpected.txt").write_text("not in manifest")
+            with self.assertRaises(ValueError):
+                module.verify(folder)
 
     def test_public_file_rejected(self):
         with tempfile.TemporaryDirectory() as temp:

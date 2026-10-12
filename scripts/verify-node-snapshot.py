@@ -8,6 +8,7 @@ import argparse
 from contextlib import closing
 import hashlib
 import json
+import re
 import os
 from pathlib import Path
 import sqlite3
@@ -66,9 +67,16 @@ def verify(folder: Path) -> int:
         actual.add(filename)
         path = folder / filename
         check_private(path, directory=False)
-        if path.stat().st_size != entry.get("bytes"):
+        if entry.get("role") != ("halo-main" if filename == "halo-main.sqlite" else "canonical-agent"):
+            fail(f"Incorrect database role: {filename}")
+        if not isinstance(entry.get("bytes"), int) or entry["bytes"] <= 0:
+            fail(f"Invalid recorded size: {filename}")
+        expected_hash = entry.get("sha256")
+        if not isinstance(expected_hash, str) or re.fullmatch(r"[0-9a-f]{64}", expected_hash) is None:
+            fail(f"Invalid SHA-256 metadata: {filename}")
+        if path.stat().st_size != entry["bytes"]:
             fail(f"Unexpected size: {filename}")
-        if sha256(path) != entry.get("sha256"):
+        if sha256(path) != expected_hash:
             fail(f"Checksum mismatch: {filename}")
         # Open SQLite in read-only mode; this is a VACUUM snapshot (no WAL needed).
         uri = "file:" + quote(str(path), safe="/") + "?mode=ro"
@@ -76,9 +84,37 @@ def verify(folder: Path) -> int:
             result = conn.execute("PRAGMA quick_check").fetchone()
             if result is None or result[0] != "ok":
                 fail(f"SQLite integrity failed: {filename}")
-        print(f"PASS {filename}: checksum + SQLite integrity")
+            if filename == "halo-main.sqlite":
+                node = conn.execute(
+                    "SELECT value FROM node_identity WHERE key='node_id'"
+                ).fetchone()
+                if not node or node[0] != document.get("node_id"):
+                    fail("Node identity does not match the backup manifest")
+                for key in ("public_key", "private_key"):
+                    record = conn.execute(
+                        "SELECT value FROM node_identity WHERE key=?", (key,)
+                    ).fetchone()
+                    if not record or not record[0]:
+                        fail("A required node key is missing from the backup")
+            else:
+                version = conn.execute(
+                    "SELECT version FROM agent_schema LIMIT 1"
+                ).fetchone()
+                if not version or version[0] != 1:
+                    fail("Unknown canonical agent backup schema")
+                for table in ("agent_runs", "agent_steps"):
+                    exists = conn.execute(
+                        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+                        (table,),
+                    ).fetchone()
+                    if not exists:
+                        fail("Canonical agent journal table is missing")
+        print(f"PASS {filename}: checksum + SQLite integrity + schema")
     if actual != expected:
         fail("Snapshot missing one or more expected database files")
+    directory_entries = {entry.name for entry in folder.iterdir()}
+    if directory_entries != expected | {"manifest.json"}:
+        fail("Unexpected or missing files in the snapshot directory")
     # A manifest can be valid without the referenced node still being available.
     print("PASS: snapshot files are internally consistent")
     print("CAUTION: unencrypted private data; no restore or cross-device compatibility test was run")
