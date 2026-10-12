@@ -138,3 +138,18 @@ portability development path, **not yet a verified shared binary publication**.
 
 See [cognitive integration](docs/COGNITIVE-INTEGRATION.md) for what's wired
 and what still requires the canonical agent/recovery modules.
+
+## Canonical agent runtime portability (opt-in)
+
+The full Android Halo `runtime/cognition` code is not copied into this repo.
+Instead, a conditional Gradle module can compile the real pinned upstream
+agent coordinator and recovery planner directly from a local checkout:
+
+```bash
+./scripts/canonical-sdk-preflight.sh ../HaloLinux-canonical
+./scripts/verify-canonical-cognition.sh ../HaloLinux-canonical
+```
+
+See [canonical agent portability](docs/CANONICAL-AGENT-PORTABILITY.md)
+and [current implementation status](docs/IMPLEMENTATION-STATUS.md).
+This is **experimental compilation**, not a production-ready agent executor.

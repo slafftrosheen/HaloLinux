@@ -57,3 +57,50 @@ the default standalone build.
 
 Physical Pi 5/Trixie, JVM builds, JNI, memory pressure and actual provider
 calls still require executed acceptance evidence.
+
+## HALO-LINUX-013 through 017 (source committed)
+
+- **013:** Atomic SQLite transaction for text turn completion, conditional journal
+  advancement and duplicate-commit rejection. Dedicated rollback tests.
+- **014:** Canonical Halo `CognitiveRequestStarted`,
+  `CognitiveReasoningStarted`, and `InferenceObserved` metadata-only events.
+- **015:** Experimental `-PhaloCanonicalCognition=true` conditional Gradle
+  target compiles the *real* canonical `runtime/cognition` sources from the
+  SHA-pinned upstream checkout, plus direct recovery-contract tests.
+- **016:** Provider lifecycle terminality is preserved during late response
+  completion and connection checks. The underlying HTTP dispatcher is cancelled
+  and closed on shutdown.
+- **017:** Typed read-only `QueryBus` for local notes and interrupted-turn
+  counters; all other query/command types still reject execution.
+
+### Truthful readiness
+
+There is **no verified Kotlin/Gradle build log** for any of these batches.
+The optional canonical agent target may discover additional dependency/API
+incompatibilities at first build. No physical Pi, Docker ARM64, audio/HiFiBerry,
+model endpoint, systemd, or 24-hour stability tests have run in this environment.
+This means the repository is still **pre-deployment source**, not accepted software.
+
+### First execution sequence, on a network-enabled Trixie Desktop Pi
+
+```bash
+git clone -b main https://github.com/slafftrosheen/HaloLinux.git
+cd HaloLinux
+python3 scripts/check-module-graph.py
+./gradlew clean build --no-daemon
+./scripts/smoke-test.sh
+./scripts/preflight.sh
+```
+
+The canonical cognition build is independent and opt-in:
+`./scripts/verify-canonical-cognition.sh /path/to/pinned/Halo-worktree`.
+Do not enable tools or auto-replay as a workaround for compile failures.
+
+### Next software work
+
+1. Executed compile fixes and source/ABI compatibility matrix for canonical SDK.
+2. A real SQLite-backed implementation of canonical `AgentRunStore`, with
+   versioned step encoding and CAS semantics; no generic JVM object serialization.
+3. Demonstrate canonical `AgentRunCoordinator` startup classification and
+   recovery *without* enabling action execution.
+4. Implement host tool authorization and resource admission separately.

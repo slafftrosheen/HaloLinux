@@ -58,6 +58,13 @@ assert s["provider"]["phase"] == "DISABLED", s["provider"]
 assert s["provider"]["attempts"] == 0
 assert s["control_protocol_version"] == 1
 PY
+halo provider check >"$WORK/no-provider-check.json"
+python3 - "$WORK/no-provider-check.json" <<'PY'
+import json,sys
+probe=json.load(open(sys.argv[1]))
+assert probe["connection_verified"] is False
+assert probe["phase"] == "DISABLED"
+PY
 if halo ask "This must not silently use a cloud provider" >"$WORK/unconfigured-ask.log" 2>&1; then
   echo "FAIL: an unconfigured model produced a successful answer" >&2; exit 1
 fi
