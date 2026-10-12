@@ -29,6 +29,50 @@ import org.json.JSONObject
  * The lock is held for the entire daemon lifetime; stale socket removal happens
  * only after the lock is acquired. Never unlink an active daemon's socket.
  */
+/** Non-sensitive client failure intended to be shown by the CLI. */
+class LocalControlFailure(val code: String, message: String) : RuntimeException(message)
+
+internal object LocalControlErrors {
+    fun safeResponse(error: Exception): JSONObject {
+        val code: String
+        val safeText: String
+        when (error) {
+            is com.halo.sdk.provider.AiProviderException -> {
+                code = error.type.name
+                safeText = when (error.type) {
+                    com.halo.sdk.provider.AiErrorType.PROVIDER_UNAVAILABLE ->
+                        "No working inference provider is configured or available."
+                    com.halo.sdk.provider.AiErrorType.MODEL_NOT_SELECTED,
+                    com.halo.sdk.provider.AiErrorType.MODEL_NOT_FOUND ->
+                        "Select an installed model in config.yaml."
+                    com.halo.sdk.provider.AiErrorType.AUTHENTICATION_FAILED ->
+                        "Provider authentication failed. Check your private credentials."
+                    com.halo.sdk.provider.AiErrorType.NETWORK_UNAVAILABLE,
+                    com.halo.sdk.provider.AiErrorType.NETWORK_ERROR ->
+                        "Inference endpoint is unreachable."
+                    com.halo.sdk.provider.AiErrorType.TIMEOUT ->
+                        "The inference request timed out."
+                    com.halo.sdk.provider.AiErrorType.RATE_LIMITED ->
+                        "The inference provider is rate-limiting requests."
+                    com.halo.sdk.provider.AiErrorType.UNSUPPORTED_CAPABILITY ->
+                        "This Linux runtime cannot execute the requested capability."
+                    else -> "Inference request failed. Check provider settings and diagnostics."
+                }
+            }
+            is IllegalArgumentException -> {
+                code = "INVALID_REQUEST"
+                safeText = "Invalid request or configuration value."
+            }
+            else -> {
+                code = "REQUEST_FAILED"
+                safeText = "The local operation failed. Check sanitized daemon logs."
+            }
+        }
+        // Never reflect arbitrary exception text (URLs, credentials, prompts, file paths).
+        return JSONObject().put("ok", false).put("error_code", code).put("error", safeText)
+    }
+}
+
 class LocalControlServer(
     private val path: Path,
     private val handler: (JSONObject) -> JSONObject,
@@ -109,7 +153,7 @@ class LocalControlServer(
                 val response = try {
                     handler(JSONObject(line))
                 } catch (failure: Exception) {
-                    JSONObject().put("ok", false).put("error", "Request failed")
+                    LocalControlErrors.safeResponse(failure)
                 }
                 Channels.newOutputStream(it).write((response.toString() + "\n").toByteArray(Charsets.UTF_8))
             }
@@ -169,7 +213,10 @@ object LocalControlClient {
                 val response = LocalControlServer.readFrame(Channels.newInputStream(channel).buffered(8192))
                 val result = JSONObject(response)
                 if (!result.optBoolean("ok")) {
-                    throw IllegalStateException(result.optString("error", "Request rejected"))
+                    throw LocalControlFailure(
+                        result.optString("error_code", "REQUEST_REJECTED"),
+                        result.optString("error", "Request rejected")
+                    )
                 }
                 return result
             } finally {

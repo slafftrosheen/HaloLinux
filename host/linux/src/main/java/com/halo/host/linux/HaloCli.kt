@@ -114,6 +114,9 @@ object HaloCli {
                 2
             }
         }
+    } catch (e: LocalControlFailure) {
+        System.err.println("Halo ${e.code}: ${e.message}")
+        1
     } catch (e: IllegalArgumentException) {
         System.err.println("Configuration/request error: ${e.message}"); 2
     } catch (e: Exception) {

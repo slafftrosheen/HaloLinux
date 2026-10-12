@@ -82,4 +82,22 @@ class LocalControlServerTest {
         }
     }
 
+    @Test fun providerErrorsAreActionableWithoutLeakingExceptionContents() {
+        val secret = "Bearer super-private-token"
+        val response = LocalControlErrors.safeResponse(
+            com.halo.sdk.provider.AiProviderException(
+                com.halo.sdk.provider.AiErrorType.AUTHENTICATION_FAILED, secret
+            )
+        )
+        assertEquals("AUTHENTICATION_FAILED", response.getString("error_code"))
+        assertFalse(response.toString().contains(secret))
+    }
+
+    @Test fun unknownExceptionsDoNotLeakPrivateContent() {
+        val response = LocalControlErrors.safeResponse(
+            IllegalStateException("user private memory and path /home/example"))
+        assertEquals("REQUEST_FAILED", response.getString("error_code"))
+        assertFalse(response.toString().contains("/home/example"))
+    }
+
 }

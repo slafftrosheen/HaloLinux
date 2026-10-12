@@ -51,6 +51,16 @@ extract_node() {
 }
 echo "Running isolated HaloLinux daemon smoke test"
 start
+python3 - "$WORK/status.json" <<'PY'
+import json,sys
+s = json.load(open(sys.argv[1]))
+assert s["provider"]["phase"] == "DISABLED", s["provider"]
+assert s["provider"]["attempts"] == 0
+assert s["control_protocol_version"] == 1
+PY
+if halo ask "This must not silently use a cloud provider" >"$WORK/unconfigured-ask.log" 2>&1; then
+  echo "FAIL: an unconfigured model produced a successful answer" >&2; exit 1
+fi
 NODE_BEFORE="$(extract_node)"
 test -n "$NODE_BEFORE" || { echo "FAIL: node identity empty" >&2; exit 1; }
 halo memory add "halo-smoke-unique-5821" >"$WORK/insert.json"
