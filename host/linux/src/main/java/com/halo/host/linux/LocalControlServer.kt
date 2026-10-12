@@ -87,6 +87,9 @@ class LocalControlServer(
         task -> Thread(task, "halo-local-deadlines").apply { isDaemon = true }
     }
     private var server: ServerSocketChannel? = null
+    // Includes queued clients, not only clients already accepted by a worker.
+    // Otherwise shutdown can leave a stalled read holding the daemon open.
+    private val acceptedClients = java.util.concurrent.ConcurrentHashMap.newKeySet<SocketChannel>()
     private var lockChannel: FileChannel? = null
     private var lock: java.nio.channels.FileLock? = null
 
@@ -133,10 +136,13 @@ class LocalControlServer(
             while (!closed.get()) {
                 val client = try { server!!.accept() }
                 catch (_: java.nio.channels.ClosedChannelException) { break }
+                acceptedClients.add(client)
                 try {
+                    if (closed.get()) throw RejectedExecutionException("Daemon is stopping")
                     clients.execute { serveClient(client) }
                 } catch (_: RejectedExecutionException) {
-                    client.close() // overloaded; fail closed rather than blocking accept
+                    acceptedClients.remove(client)
+                    runCatching { client.close() } // fail closed under overload/shutdown
                 }
             }
         } finally {
@@ -170,14 +176,27 @@ class LocalControlServer(
             // A malformed/stalled client must not terminate the daemon.
         } finally {
             watchdog.cancel(false)
+            acceptedClients.remove(client)
         }
     }
 
     override fun close() {
         if (!closed.compareAndSet(false, true)) return
         runCatching { server?.close() }
+        // Closing sockets unblocks parked readers and writers. Interrupting
+        // workers then requests cancellation of any running coroutines.
+        acceptedClients.forEach { runCatching { it.close() } }
         clients.shutdownNow()
         deadlines.shutdownNow()
+        try {
+            // The systemd user unit has a 30-second stop deadline. Allow a
+            // bounded drain; never block the shutdown hook indefinitely.
+            if (!clients.awaitTermination(10, TimeUnit.SECONDS)) {
+                System.err.println("Halo node: active request did not drain before shutdown")
+            }
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+        }
         if (lock != null) {
             // Only the owner of the lock may remove the named socket.
             runCatching { Files.deleteIfExists(path) }

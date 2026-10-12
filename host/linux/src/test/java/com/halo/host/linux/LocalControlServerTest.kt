@@ -144,4 +144,23 @@ class LocalControlServerTest {
         } finally { server.close(); runner.join(2000) }
     }
 
+    @Test fun shutdownClosesIncompleteClientFrameWithoutLeavingWorkerRunning() {
+        val path = tmp.resolve("shutdown.sock")
+        val (server, runner) = start(path)
+        val waiting = SocketChannel.open(StandardProtocolFamily.UNIX)
+        try {
+            waiting.connect(UnixDomainSocketAddress.of(path))
+            java.nio.channels.Channels.newOutputStream(waiting).write(
+                "{\\\"op\\\":".toByteArray(Charsets.UTF_8)
+            )
+            server.close()
+            runner.join(3000)
+            assertFalse(runner.isAlive)
+            assertFalse(Files.exists(path))
+        } finally {
+            runCatching { waiting.close() }
+            server.close()
+        }
+    }
+
 }
