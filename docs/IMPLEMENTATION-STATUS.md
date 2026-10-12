@@ -246,3 +246,15 @@ On first connected x86-64 or Pi 5/Trixie Linux test, run:
 
 Run the separate pinned canonical cognition build only after the normal
 standalone build passes, with actual compiler output retained.
+
+## HALO-LINUX-036–038 follow-on stabilization
+
+- 036: reject partially configured inference endpoint/model pairs and relative
+  data paths, preventing a Desktop-to-systemd storage-location split.
+- 037: missing configuration still starts model-free, but an existing symlink,
+  directory, or unexpected filesystem object is rejected.
+- 038: provider generation retains its one-at-a-time inference permit until
+  SDK response validation, terminal status recording, and latency bookkeeping
+  complete. Admission failure does not mark another active request degraded.
+
+These source changes remain pending Gradle/JUnit execution.

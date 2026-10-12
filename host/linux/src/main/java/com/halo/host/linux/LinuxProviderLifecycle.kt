@@ -119,57 +119,53 @@ class LinuxProviderLifecycle(
         require(text.isNotBlank() && text.length <= 32_000) { "Invalid text request" }
         val target = provider ?: throw AiProviderException(
             AiErrorType.PROVIDER_UNAVAILABLE, "No inference provider configured")
-        val model = modelId?.takeIf(String::isNotBlank) ?: throw AiProviderException(
+        val model = modelId?.takeIf { it.isNotBlank() } ?: throw AiProviderException(
             AiErrorType.MODEL_NOT_SELECTED, "No model configured")
-        synchronized(lock) {
-            check(!closed) { "Provider is stopped" }
-            attempts++
+        synchronized(lock) { check(!closed) { "Provider is stopped" } }
+
+        // A busy result is an admission failure, not evidence the running
+        // model failed. Never let queued calls overwrite INFERENCING status.
+        try {
+            withTimeout(admissionTimeoutMs) { inferencePermit.acquire() }
+        } catch (_: kotlinx.coroutines.TimeoutCancellationException) {
+            throw AiProviderException(
+                AiErrorType.RATE_LIMITED, "Linux inference concurrency limit reached")
         }
+
         val start = monotonicNs()
         try {
-            // Short, independently bounded admission avoids piling up Pi model
-            // requests whose clients will time out before inference even starts.
-            val acquired = try {
-                withTimeout(admissionTimeoutMs) { inferencePermit.acquire(); true }
-            } catch (_: kotlinx.coroutines.TimeoutCancellationException) {
-                throw AiProviderException(
-                    AiErrorType.RATE_LIMITED, "Linux inference concurrency limit reached"
+            synchronized(lock) {
+                check(!closed) { "Provider is stopped" }
+                attempts++
+                phase = LinuxProviderPhase.INFERENCING
+                inFlight = true
+            }
+            val response = withTimeout(timeoutMs) {
+                target.generate(
+                    AiRequest(text = text, modelId = model, interactionId = interactionId,
+                        toolUseMode = com.halo.sdk.provider.ToolUseMode.NONE),
+                    AiContext.EMPTY,
                 )
             }
-            val result = try {
-                synchronized(lock) {
-                    check(!closed) { "Provider is stopped" }
-                    phase = LinuxProviderPhase.INFERENCING
-                    inFlight = true
-                }
-                withTimeout(timeoutMs) {
-                    target.generate(
-                        AiRequest(text = text, modelId = model, interactionId = interactionId,
-                            toolUseMode = com.halo.sdk.provider.ToolUseMode.NONE),
-                        AiContext.EMPTY
-                    )
-                }
-            } finally {
-                synchronized(lock) { inFlight = false }
-                if (acquired) inferencePermit.release()
-            }
-            if (result.toolCalls.isNotEmpty()) throw AiProviderException(
+            // Validation and status update must occur BEFORE releasing the lease.
+            // Otherwise the previous answer can mark a newer request AVAILABLE.
+            if (response.toolCalls.isNotEmpty()) throw AiProviderException(
                 AiErrorType.UNSUPPORTED_CAPABILITY,
                 "Tool calls cannot be executed by the current Linux host")
-            if (result.text.isBlank()) throw AiProviderException(
+            if (response.text.isBlank()) throw AiProviderException(
                 AiErrorType.EMPTY_RESPONSE, "The provider returned no text")
             synchronized(lock) {
-                if (closed) throw CancellationException("Provider was stopped during inference")
+                if (closed) throw CancellationException("Provider stopped during inference")
                 phase = LinuxProviderPhase.AVAILABLE
                 successes++
                 lastFailureType = null
                 lastLatencyMs = TimeUnit.NANOSECONDS.toMillis(monotonicNs() - start)
             }
-            return result
+            return response
         } catch (cancel: CancellationException) {
             synchronized(lock) {
                 if (!closed) {
-                    if (!inFlight) phase = LinuxProviderPhase.DEGRADED
+                    phase = LinuxProviderPhase.DEGRADED
                     lastFailureType = "CANCELLED_OR_TIMEOUT"
                 }
             }
@@ -177,11 +173,15 @@ class LinuxProviderLifecycle(
         } catch (error: Exception) {
             synchronized(lock) {
                 if (!closed) {
-                    if (!inFlight) phase = LinuxProviderPhase.DEGRADED
-                    lastFailureType = (error as? AiProviderException)?.type?.name ?: "GENERATION_FAILED"
+                    phase = LinuxProviderPhase.DEGRADED
+                    lastFailureType = (error as? AiProviderException)?.type?.name
+                        ?: "GENERATION_FAILED"
                 }
             }
             throw error
+        } finally {
+            synchronized(lock) { inFlight = false }
+            inferencePermit.release()
         }
     }
 
