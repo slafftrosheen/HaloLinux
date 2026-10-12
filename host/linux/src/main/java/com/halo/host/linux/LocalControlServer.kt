@@ -52,6 +52,8 @@ internal object LocalControlErrors {
                         "Inference endpoint is unreachable."
                     com.halo.sdk.provider.AiErrorType.TIMEOUT ->
                         "The inference request timed out."
+                    com.halo.sdk.provider.AiErrorType.INVALID_RESPONSE ->
+                        "Model response could not be delivered. It may be too large or malformed."
                     com.halo.sdk.provider.AiErrorType.RATE_LIMITED ->
                         "Inference is busy or the provider is rate-limiting. Try later."
                     com.halo.sdk.provider.AiErrorType.UNSUPPORTED_CAPABILITY ->

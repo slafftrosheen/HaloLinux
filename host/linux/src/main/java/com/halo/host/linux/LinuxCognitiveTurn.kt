@@ -77,8 +77,11 @@ class LinuxCognitiveTurn(
             // Leave headroom for the control envelope, model metadata and IDs.
             val encodedAnswerBytes = org.json.JSONObject().put("text", response.text)
                 .toString().toByteArray(Charsets.UTF_8).size
-            require(encodedAnswerBytes <= 96 * 1024) {
-                "Model response exceeds the supported local control envelope"
+            if (encodedAnswerBytes > 96 * 1024) {
+                throw com.halo.sdk.provider.AiProviderException(
+                    com.halo.sdk.provider.AiErrorType.INVALID_RESPONSE,
+                    "Model response exceeds the supported local control envelope"
+                )
             }
             recoverySupport().recordTextResponse(agentRunId, response.text)
             val elapsed = TimeUnit.NANOSECONDS.toMillis(clockNs() - start)

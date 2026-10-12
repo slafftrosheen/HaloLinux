@@ -156,9 +156,10 @@ class LinuxCognitiveTurnTest {
         val provider = LinuxProviderLifecycle(model, "fixture-model")
         try {
             runtime.start()
-            assertThrows(IllegalArgumentException::class.java) {
+            val failure = assertThrows(com.halo.sdk.provider.AiProviderException::class.java) {
                 runBlocking { LinuxCognitiveTurn(provider, store, runtime).ask("small request") }
             }
+            assertEquals(com.halo.sdk.provider.AiErrorType.INVALID_RESPONSE, failure.type)
             assertEquals(0L, store.checkDatabase().conversationCount)
         } finally {
             provider.close()
