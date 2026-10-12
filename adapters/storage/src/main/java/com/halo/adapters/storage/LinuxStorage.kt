@@ -285,7 +285,7 @@ class LinuxStorage {
                 ORDER BY rank
                 LIMIT ?
             """.trimIndent()).use { stmt ->
-                val tokens = Regex("[\\\\p{L}\\\\p{N}_]+").findAll(query)
+                val tokens = Regex("[\\p{L}\\p{N}_]+").findAll(query)
                     .map { it.value }.take(20).toList()
                 require(tokens.isNotEmpty()) { "Search must include a word or number" }
                 stmt.setString(1, tokens.joinToString(" AND ") { token ->
