@@ -77,6 +77,10 @@ object HaloCli {
                 val reply = request(JSONObject().put("op", "ask").put("text", question))
                 println(reply.getString("text")); 0
             }
+            "provider" -> {
+                if (args.getOrNull(1) != "check") throw IllegalArgumentException("Usage: halo-node provider check")
+                println(request(JSONObject().put("op", "provider.check")).toString(2)); 0
+            }
             "storage" -> {
                 val op = args.getOrNull(1)
                 when (op) {
@@ -146,8 +150,10 @@ object HaloCli {
             storage.getNodeIdentity()
         }
         val runtime = LinuxRuntimeBridge()
+        val provider = LinuxProviderLifecycle.create(config)
+        val cognition = LinuxCognitiveTurn(provider, storage, runtime)
         val server = LocalControlServer(socketPath()) { input ->
-            runBlocking { handle(storage, config, runtime, input) }
+            runBlocking { handle(storage, config, runtime, provider, cognition, input) }
         }
         val shutdown = Thread { server.close() }
         Runtime.getRuntime().addShutdownHook(shutdown)
@@ -158,13 +164,13 @@ object HaloCli {
         } finally {
             server.close()
             runBlocking {
-                try { runtime.stop() } finally { storage.close() }
+                try { runtime.stop() } finally { try { provider.close() } finally { storage.close() } }
             }
             runCatching { Runtime.getRuntime().removeShutdownHook(shutdown) }
         }
     }
 
-    private suspend fun handle(store: LinuxStorage, config: NodeConfig, runtime: LinuxRuntimeBridge, input: JSONObject): JSONObject {
+    private suspend fun handle(store: LinuxStorage, config: NodeConfig, runtime: LinuxRuntimeBridge, provider: LinuxProviderLifecycle, cognition: LinuxCognitiveTurn, input: JSONObject): JSONObject {
         val protocolVersion = input.optInt("protocol_version", -1)
         if (protocolVersion != 1) {
             return JSONObject().put("ok", false)
@@ -187,11 +193,24 @@ object HaloCli {
                 })
                 .put("storage", "READY")
                 .put("inference_configured", config.providerConfigured)
-                .put("provider_connectivity", "NOT_CHECKED")
+                .put("provider", provider.snapshot().let { snapshot ->
+                    JSONObject().put("phase", snapshot.phase.name)
+                        .put("provider_id", snapshot.providerId ?: JSONObject.NULL)
+                        .put("model_id", snapshot.modelId ?: JSONObject.NULL)
+                        .put("attempts", snapshot.attempts)
+                        .put("successes", snapshot.successes)
+                        .put("last_failure_type", snapshot.lastFailureType ?: JSONObject.NULL)
+                        .put("last_latency_ms", snapshot.lastLatencyMs ?: JSONObject.NULL)
+                })
                 .put("selected_model", config.providerModel ?: JSONObject.NULL)
                 .put("audio", "NOT_VERIFIED")
                 .put("sync", "DISABLED")
                 .put("node_id", store.getNodeIdentity().nodeId)
+            "provider.check" -> {
+                val connected = provider.checkConnectivity()
+                JSONObject().put("ok", true).put("connection_verified", connected)
+                    .put("phase", provider.snapshot().phase.name)
+            }
             "storage.check" -> {
                 val report = store.checkDatabase()
                 JSONObject().put("ok", report.integrityOk)
@@ -232,58 +251,14 @@ object HaloCli {
                 JSONObject().put("ok", true).put("results", results)
             }
             "ask" -> {
-                require(config.providerConfigured) { "Configure endpoint and model in config.yaml" }
                 val text = input.getString("text").trim()
-                require(text.isNotBlank() && text.length <= 32_000) { "Invalid question" }
-                val endpoint = config.providerEndpoint!!
-                val auth = config.apiKey
-                val uri = java.net.URI(endpoint)
-                val insecureLoopback = uri.scheme == "http" &&
-                    uri.host.lowercase() in setOf("localhost", "127.0.0.1", "::1")
-                val credentials = object : CredentialProvider {
-                    private var secret: Credential? = if (auth == null)
-                        Credential("local.none", "") else Credential("remote.bearer", auth)
-                    override fun hasCredential(): Boolean = secret != null
-                    override fun credential(): Credential? = secret
-                    override fun setCredential(credential: Credential) { secret = credential }
-                    override fun clearCredential() { secret = null }
-                }
-                val transport = OpenAiCompatibleTransport(
-                    OkHttpClient.Builder()
-                        .callTimeout(120, TimeUnit.SECONDS)
-                        .build(),
-                    endpoint,
-                    AiWireProtocol.OPENAI_CHAT_COMPLETIONS,
-                )
-                val provider = LinuxOpenAiCompatibleProvider(
-                    LinuxProviderConfig(
-                        baseUrl = endpoint,
-                        executionLocation = endpointExecutionLocation(endpoint),
-                        authKind = if (auth == null) ProviderAuthKind.NONE else ProviderAuthKind.BEARER_TOKEN,
-                        allowInsecureLocalCredentialTransport = insecureLoopback,
-                    ),
-                    transport,
-                    credentials,
-                )
-                val start = System.nanoTime()
-                val response = provider.generate(AiRequest(text = text, modelId = config.providerModel), AiContext())
-                require(response.text.isNotBlank()) { "Provider returned an empty response" }
-                val now = Instant.now()
-                val conversationId = UUID.randomUUID().toString()
-                val durationMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start)
-                store.storeConversation(ConversationRecord(
-                    id = conversationId, title = text.take(80),
-                    createdAt = now, updatedAt = now,
-                    providerId = provider.id, modelId = config.providerModel, metadata = "{}",
-                    messages = listOf(
-                        MessageRecord(UUID.randomUUID().toString(), conversationId, "user", text,
-                            null, null, 0L, 0L, now, "{}"),
-                        MessageRecord(UUID.randomUUID().toString(), conversationId, "assistant", response.text,
-                            provider.id, config.providerModel, 0L, durationMs, Instant.now(), "{}"),
-                    ),
-                ))
-                JSONObject().put("ok", true).put("text", response.text)
-                    .put("conversation_id", conversationId).put("latency_ms", durationMs)
+                val answer = cognition.ask(text)
+                JSONObject().put("ok", true).put("text", answer.text)
+                    .put("conversation_id", answer.conversationId)
+                    .put("interaction_id", answer.interactionId)
+                    .put("provider_id", answer.providerId)
+                    .put("model_id", answer.modelId ?: JSONObject.NULL)
+                    .put("latency_ms", answer.latencyMs)
             }
             else -> JSONObject().put("ok", false).put("error", "Unsupported operation")
         }

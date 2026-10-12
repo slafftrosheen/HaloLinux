@@ -13,6 +13,7 @@
     "op": {
       "enum": [
         "status",
+      "provider.check",
         "ask",
         "memory.add",
         "memory.search",
