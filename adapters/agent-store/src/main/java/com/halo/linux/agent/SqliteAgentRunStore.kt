@@ -447,7 +447,7 @@ class SqliteAgentRunStore(
                     ?: return@transaction false
                 val value = resolution.value
                 if (value.length !in expected.minLength..expected.maxLength ||
-                    (expected.singleLine && (value.contains('\\n') || value.contains('\\r')))) {
+                    (expected.singleLine && (value.contains('\n') || value.contains('\r')))) {
                     return@transaction false
                 }
             }

@@ -246,7 +246,7 @@ class SqliteAgentRunStoreTest {
             assertFalse(storage.resolveInputIfPending(reqId, AgentInputResolution.Clarified("A")))
             assertFalse(storage.resolveInputIfPending(reqId, AgentInputResolution.Clarified("too-long")))
             assertFalse(storage.resolveInputIfPending(reqId,
-                AgentInputResolution.Clarified("AA\\nB")))
+                AgentInputResolution.Clarified("AA\nB")))
             assertTrue(storage.resolveInputIfPending(reqId, AgentInputResolution.Clarified("Halo")))
             assertFalse(storage.resolveInputIfPending(reqId, AgentInputResolution.Clarified("Again")))
         }
