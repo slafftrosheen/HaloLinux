@@ -112,3 +112,12 @@ already successful request), with `canonical_journal_state=NEEDS_RECONCILIATION`
 The unfinished canonical record is visible to explicit startup recovery
 inspection. No automatic rerun occurs. Cancellation continues to propagate.
 The opt-in result also includes the canonical agent run ID.
+
+## HALO-LINUX-024 — bounded inference admission
+
+Each node permits one active model generation at a time. A second caller may
+wait up to five seconds to acquire the inference lease; otherwise the request
+fails with a sanitized busy/rate-limit error **before another model call starts**.
+Actual generation retains its separate bounded timeout. This prevents a backlog
+of stale local control requests while the Pi is under CPU or memory pressure.
+The adapter does not automatically retry a timed-out or busy inference.

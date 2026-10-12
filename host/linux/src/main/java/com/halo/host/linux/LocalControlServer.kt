@@ -53,7 +53,7 @@ internal object LocalControlErrors {
                     com.halo.sdk.provider.AiErrorType.TIMEOUT ->
                         "The inference request timed out."
                     com.halo.sdk.provider.AiErrorType.RATE_LIMITED ->
-                        "The inference provider is rate-limiting requests."
+                        "Inference is busy or the provider is rate-limiting. Try later."
                     com.halo.sdk.provider.AiErrorType.UNSUPPORTED_CAPABILITY ->
                         "This Linux runtime cannot execute the requested capability."
                     else -> "Inference request failed. Check provider settings and diagnostics."

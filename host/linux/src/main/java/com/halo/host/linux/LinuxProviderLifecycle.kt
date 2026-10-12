@@ -46,6 +46,7 @@ class LinuxProviderLifecycle(
     val modelId: String?,
     private val onClose: () -> Unit = {},
     private val timeoutMs: Long = 120_000,
+    private val admissionTimeoutMs: Long = 5_000,
     private val monotonicNs: () -> Long = System::nanoTime,
 ) : AutoCloseable {
     private val lock = Any()
@@ -116,24 +117,31 @@ class LinuxProviderLifecycle(
         }
         val start = monotonicNs()
         try {
-            // Applies both to queue admission and generation. No duplicate retry on timeout.
-            val result = withTimeout(timeoutMs) {
-                inferencePermit.withPermit {
-                    synchronized(lock) {
-                        check(phase != LinuxProviderPhase.STOPPED) { "Provider is stopped" }
-                        phase = LinuxProviderPhase.INFERENCING
-                        inFlight = true
-                    }
-                    try {
-                        target.generate(
-                            AiRequest(text = text, modelId = model, interactionId = interactionId,
-                                toolUseMode = com.halo.sdk.provider.ToolUseMode.NONE),
-                            AiContext.EMPTY
-                        )
-                    } finally {
-                        synchronized(lock) { inFlight = false }
-                    }
+            // Short, independently bounded admission avoids piling up Pi model
+            // requests whose clients will time out before inference even starts.
+            val acquired = try {
+                withTimeout(admissionTimeoutMs) { inferencePermit.acquire(); true }
+            } catch (_: kotlinx.coroutines.TimeoutCancellationException) {
+                throw AiProviderException(
+                    AiErrorType.RATE_LIMITED, "Linux inference concurrency limit reached"
+                )
+            }
+            val result = try {
+                synchronized(lock) {
+                    check(!closed) { "Provider is stopped" }
+                    phase = LinuxProviderPhase.INFERENCING
+                    inFlight = true
                 }
+                withTimeout(timeoutMs) {
+                    target.generate(
+                        AiRequest(text = text, modelId = model, interactionId = interactionId,
+                            toolUseMode = com.halo.sdk.provider.ToolUseMode.NONE),
+                        AiContext.EMPTY
+                    )
+                }
+            } finally {
+                synchronized(lock) { inFlight = false }
+                if (acquired) inferencePermit.release()
             }
             if (result.toolCalls.isNotEmpty()) throw AiProviderException(
                 AiErrorType.UNSUPPORTED_CAPABILITY,

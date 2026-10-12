@@ -93,4 +93,37 @@ class LinuxProviderLifecycleTest {
         lifecycle.close() // idempotent
     }
 
+    @Test fun secondRequestFailsBusyWithoutSendingSecondModelCall() = runBlocking {
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val calls = java.util.concurrent.atomic.AtomicInteger()
+        val blocking = object : AiInferenceProvider by fixture() {
+            override suspend fun generate(request: AiRequest, context: AiContext): AiResponse {
+                calls.incrementAndGet()
+                entered.complete(Unit)
+                release.await()
+                return AiResponse(text = "finished", providerId = "fixture",
+                    modelId = request.modelId)
+            }
+        }
+        val lifecycle = LinuxProviderLifecycle(
+            blocking, "fixture-model", timeoutMs = 3_000, admissionTimeoutMs = 40
+        )
+        val first = async(Dispatchers.Default) {
+            runCatching { lifecycle.generate("first", "first-turn") }
+        }
+        try {
+            withTimeout(1000) { entered.await() }
+            val busy = runCatching { lifecycle.generate("second", "second-turn") }
+            assertTrue(busy.isFailure)
+            assertEquals(com.halo.sdk.provider.AiErrorType.RATE_LIMITED,
+                (busy.exceptionOrNull() as com.halo.sdk.provider.AiProviderException).type)
+            assertEquals(1, calls.get())
+        } finally {
+            release.complete(Unit)
+            withTimeout(1000) { first.await() }
+            lifecycle.close()
+        }
+    }
+
 }
