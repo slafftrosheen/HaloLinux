@@ -6,6 +6,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HALO_ROOT="${1:-$ROOT/../HaloLinux-canonical}"
 cd "$ROOT"
 ./scripts/canonical-sdk-preflight.sh "$HALO_ROOT"
+python3 scripts/check-canonical-contract.py "$HALO_ROOT"
 echo "Verifying canonical Halo cognition, Linux SQLite AgentRunStore, and opt-in host..."
 ./gradlew -PhaloCanonicalRoot="$(realpath "$HALO_ROOT")" \
   -PhaloCanonicalCognition=true \

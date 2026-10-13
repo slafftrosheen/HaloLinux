@@ -66,3 +66,12 @@ then publish pinned shared JVM artifacts and remove the duplicate source trees.
    dispatch. Show `prepareOutstandingRunsForRecovery` classifying unfinished runs.
 5. Only enable actions after resource leasing, user authorization and replay
    safety gates are tested against real host capabilities.
+
+## HALO-LINUX-046B — pinned contract preflight
+
+`python3 scripts/check-canonical-contract.py /path/to/pinned/Halo` checks
+SHA identity, AgentRunStore method presence, canonical coordinator recovery
+entry point, and symmetric encode/decode support for canonical AgentStep
+variants. Unsupported canonical variants are reported explicitly. The
+verification script now runs this before Gradle. This is a **static guard**,
+not a replacement for Kotlin/JVM compilation or semantic round-trip tests.
