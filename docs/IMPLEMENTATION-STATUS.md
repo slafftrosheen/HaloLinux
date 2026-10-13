@@ -298,3 +298,11 @@ The shutdown policy still has a bounded termination window; an uncooperative
 native library cannot be guaranteed to stop without actual JVM/Pi testing.
 The locally executed, isolated Kotlin/coroutines admission test passed, but
 **none of the repository's Gradle or JUnit tasks have yet been run**.
+
+## HALO-LINUX-047 — owner-private Unix control path
+
+The CLI and daemon now share `LinuxSocketPaths`. It rejects relative,
+symlinked and shared `XDG_RUNTIME_DIR` values before creating or changing
+socket directories, and creates a 0700 fallback under the user's home when
+XDG is absent. This protects the local-only API from unintentional placement
+in public directories during Desktop/systemd/headless transitions.

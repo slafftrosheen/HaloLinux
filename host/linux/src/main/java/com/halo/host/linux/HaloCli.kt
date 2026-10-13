@@ -39,15 +39,7 @@ object HaloCli {
     private fun socketPath(): Path {
         val home = Path.of(System.getProperty("user.home"))
         val runtime = System.getenv("XDG_RUNTIME_DIR")?.let(Path::of)
-            ?: home.resolve(".local/state/halo-linux/run")
-        Files.createDirectories(runtime)
-        val dir = runtime.resolve("halo-linux")
-        Files.createDirectories(dir)
-        Files.setPosixFilePermissions(dir, setOf(
-            PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE,
-            PosixFilePermission.OWNER_EXECUTE
-        ))
-        return dir.resolve("node.sock")
+        return LinuxSocketPaths.socket(home, runtime)
     }
 
     fun run(args: Array<String>): Int = try {
