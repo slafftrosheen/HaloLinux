@@ -247,4 +247,29 @@ class LinuxStorageTest {
         }
     }
 
+    @Test fun newerMainDatabaseSchemaFailsClosedWithoutDowngrade() = runTest {
+        open().close()
+        val path = tempDir.resolve("data/halo.db")
+        java.sql.DriverManager.getConnection("jdbc:sqlite:${path}").use { db ->
+            db.prepareStatement(
+                "INSERT INTO schema_version(version,applied_at,description) VALUES (999,?,?)"
+            ).use { stmt ->
+                stmt.setString(1, Instant.now().toString())
+                stmt.setString(2, "future test")
+                stmt.executeUpdate()
+            }
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            kotlinx.coroutines.runBlocking { open() }
+        }
+        java.sql.DriverManager.getConnection("jdbc:sqlite:${path}").use { db ->
+            db.createStatement().use { stmt ->
+                stmt.executeQuery("SELECT MAX(version) FROM schema_version").use { row ->
+                    assertTrue(row.next())
+                    assertEquals(999, row.getInt(1))
+                }
+            }
+        }
+    }
+
 }

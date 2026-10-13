@@ -349,4 +349,25 @@ class SqliteAgentRunStoreTest {
         assertFalse(java.nio.file.Files.exists(other.resolve("unexpected.db")))
     }
 
+    @Test fun existingUnversionedAgentDbIsNeverAdoptedAsV1() {
+        val path = folder.resolve("legacy-agent.sqlite").toAbsolutePath()
+        java.sql.DriverManager.getConnection("jdbc:sqlite:${path}").use { db ->
+            db.createStatement().use { stmt ->
+                stmt.execute("CREATE TABLE agent_runs(id TEXT PRIMARY KEY)")
+                stmt.execute("INSERT INTO agent_runs(id) VALUES ('old-record')")
+            }
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            SqliteAgentRunStore(path)
+        }
+        java.sql.DriverManager.getConnection("jdbc:sqlite:${path}").use { db ->
+            db.createStatement().use { stmt ->
+                stmt.executeQuery("SELECT COUNT(*) FROM agent_runs").use { row ->
+                    assertTrue(row.next())
+                    assertEquals(1, row.getInt(1))
+                }
+            }
+        }
+    }
+
 }

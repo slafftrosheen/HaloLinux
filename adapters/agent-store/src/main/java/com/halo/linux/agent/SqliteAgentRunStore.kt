@@ -69,6 +69,21 @@ class SqliteAgentRunStore(
                     require(version == null || version == 1) {
                         "Unknown canonical agent journal database schema: $version"
                     }
+                    if (version == null) {
+                        // An existing, unversioned run store must never be
+                        // guessed to match our v1 schema. Only empty databases
+                        // may initialize a fresh canonical agent journal.
+                        val legacy = stmt.executeQuery("""
+                            SELECT COUNT(*) FROM sqlite_master
+                            WHERE type='table' AND name IN ('agent_runs','agent_steps')
+                        """.trimIndent()).use { row ->
+                            row.next()
+                            row.getInt(1)
+                        }
+                        require(legacy == 0) {
+                            "Existing agent journal has no schema version; refusing implicit migration"
+                        }
+                    }
                     stmt.execute("""
                         CREATE TABLE IF NOT EXISTS agent_runs (
                           id TEXT PRIMARY KEY, interaction_id TEXT NOT NULL,

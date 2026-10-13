@@ -161,6 +161,10 @@ class LinuxStorage {
                     if (rs.next()) rs.getInt(1) else 0
                 }
             }
+            val latestSupported = migrations.maxOf { it.version }
+            require(current <= latestSupported) {
+                "Halo storage schema $current is newer than supported $latestSupported; refusing downgrade"
+            }
             migrations.filter { it.version > current }.forEach { migration ->
                 conn.autoCommit = false
                 try {
