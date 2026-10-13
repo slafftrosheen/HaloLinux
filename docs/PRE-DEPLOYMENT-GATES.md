@@ -101,3 +101,14 @@ private identity keys are present, and (when enabled) that the agent journal
 uses the supported v1 schema and expected tables. Extra files in the
 snapshot directory are rejected. These checks verify **internal consistency**,
 not that the backup is authentic, encrypted, or safe to restore over live data.
+
+## HALO-LINUX-046C — executable SQLite journal constraints
+
+The offline gate now executes `scripts/check-agent-journal-schema.py` using
+Python's actual SQLite engine. It extracts the CREATE TABLE/INDEX statements
+from the experimental Kotlin store, checks uniqueness of execution keys and
+recovery fingerprints, first-writer resolution IDs, foreign keys, transaction
+rollback and a verified SQLite VACUUM snapshot. This does not compile the Kotlin
+adapter, validate its codecs, or prove the bundled JDBC version behaves
+identically on ARM64. It provides a fast local schema regression ahead of
+Gradle and hardware acceptance.

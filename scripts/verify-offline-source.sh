@@ -10,4 +10,6 @@ echo "Checking project dependencies"
 python3 scripts/check-module-graph.py
 echo "Checking snapshot verifier fixtures"
 python3 scripts/check-snapshot-verifier.py
+echo "Checking canonical agent SQLite DDL invariants"
+python3 scripts/check-agent-journal-schema.py
 echo "PASS: offline source gates (not a JVM or ARM64 build)"
