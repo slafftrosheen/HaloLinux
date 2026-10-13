@@ -306,3 +306,14 @@ symlinked and shared `XDG_RUNTIME_DIR` values before creating or changing
 socket directories, and creates a 0700 fallback under the user's home when
 XDG is absent. This protects the local-only API from unintentional placement
 in public directories during Desktop/systemd/headless transitions.
+
+## HALO-LINUX-046–049 pre-build checkpoint
+
+- **046A:** Canonical SQLite agent-store paths reject symlinked ancestors before creating or chmodding directories.
+- **046B:** SHA-pinned structural AgentRunStore/AgentStep compatibility check, invoked before opt-in canonical Gradle compilation.
+- **046C:** Offline executable SQLite journal constraints check, including global execution-key deduplication, recovery/input uniqueness, foreign-key rejection, rollback and a verified VACUUM snapshot.
+- **047:** Runtime socket paths reject shared, relative, and symlinked XDG runtime directories. Tests cover safe fallback to private home-owned runtime directories.
+- **048:** Main storage rejects database schemas newer than it understands. Canonical agent SQLite rejects unversioned legacy run stores instead of silently assuming v1 compatibility.
+- **049:** Offline verification parses Python files without modifying source directories with bytecode caches; script-based checks run in `python3 -B` mode.
+
+**Verification scope:** GitHub revisions and source contract symmetry are confirmed. An isolated SQLite 3.46.1 engine exercised representative claim/deduplication constraints successfully. The complete new offline preflight and repository Gradle/JUnit tests still require execution from a full local checkout. No Pi 5 or ARM64 acceptance is claimed.

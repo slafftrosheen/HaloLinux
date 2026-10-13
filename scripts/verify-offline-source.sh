@@ -4,12 +4,18 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 echo "Checking shell syntax"
 for script in scripts/*.sh; do bash -n "$script"; done
-echo "Checking Python syntax"
-python3 -m compileall -q scripts
+echo "Checking Python syntax without generating __pycache__"
+python3 -B - <<'PY'
+import ast
+from pathlib import Path
+for path in sorted(Path("scripts").glob("*.py")):
+    ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+print("PASS: Python syntax")
+PY
 echo "Checking project dependencies"
-python3 scripts/check-module-graph.py
+python3 -B scripts/check-module-graph.py
 echo "Checking snapshot verifier fixtures"
-python3 scripts/check-snapshot-verifier.py
+python3 -B scripts/check-snapshot-verifier.py
 echo "Checking canonical agent SQLite DDL invariants"
-python3 scripts/check-agent-journal-schema.py
+python3 -B scripts/check-agent-journal-schema.py
 echo "PASS: offline source gates (not a JVM or ARM64 build)"
