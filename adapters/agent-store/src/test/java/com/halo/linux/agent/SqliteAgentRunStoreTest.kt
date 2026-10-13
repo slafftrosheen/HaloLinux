@@ -329,4 +329,24 @@ class SqliteAgentRunStoreTest {
         }
     }
 
+    @Test fun agentDatabaseRejectsRedirectedAncestorBeforeCreation() {
+        val other = folder.resolve("outside")
+        java.nio.file.Files.createDirectories(other)
+        val link = folder.resolve("redirect")
+        java.nio.file.Files.createSymbolicLink(link, other)
+        assertThrows(IllegalArgumentException::class.java) {
+            SqliteAgentRunStore(link.resolve("agent.db").toAbsolutePath())
+        }
+        assertFalse(java.nio.file.Files.exists(other.resolve("agent.db")))
+        val real = folder.resolve("real")
+        java.nio.file.Files.createDirectories(real)
+        java.nio.file.Files.createSymbolicLink(
+            real.resolve("agent.db"), other.resolve("unexpected.db")
+        )
+        assertThrows(IllegalArgumentException::class.java) {
+            SqliteAgentRunStore(real.resolve("agent.db").toAbsolutePath())
+        }
+        assertFalse(java.nio.file.Files.exists(other.resolve("unexpected.db")))
+    }
+
 }

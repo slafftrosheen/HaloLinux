@@ -33,12 +33,27 @@ class SqliteAgentRunStore(
     private val epoch = MutableStateFlow(0L)
     @Volatile private var closed = false
 
+    private fun validatePath(path: Path) {
+        require(path.isAbsolute) { "Agent run database path must be absolute" }
+        val normalized = path.normalize()
+        require(normalized == path) { "Agent run database path must be normalized" }
+        var node = normalized.root ?: error("Agent run database has no root")
+        for (component in normalized) {
+            node = node.resolve(component)
+            require(!Files.isSymbolicLink(node)) {
+                "Agent run database path contains a symlink"
+            }
+        }
+    }
+
     init {
-        require(database.isAbsolute) { "Agent run database path must be absolute" }
-        require(!Files.isSymbolicLink(database)) { "Refusing a symlinked agent database" }
+        validatePath(database)
         val parent = database.parent ?: error("Database has no parent")
+        // The complete ancestor chain was examined before the first mutation.
+        // Validate again after directory creation to avoid following a
+        // redirect created between discovery and SQLite initialization.
         Files.createDirectories(parent)
-        require(!Files.isSymbolicLink(parent)) { "Refusing symlinked agent database directory" }
+        validatePath(database)
         Files.setPosixFilePermissions(parent, setOf(
             PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE,
             PosixFilePermission.OWNER_EXECUTE
