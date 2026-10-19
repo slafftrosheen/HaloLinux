@@ -1,7 +1,12 @@
 package com.halo.adapters.storage
 
-import com.halo.libraries.common.core.Identifier
-import com.halo.sdk.runtime.Storage
+import com.halo.sdk.runtime.StructuredStorage
+import com.halo.sdk.runtime.StructuredStorageConfig
+import com.halo.sdk.runtime.ConversationRecord
+import com.halo.sdk.runtime.MessageRecord
+import com.halo.sdk.runtime.ConversationSummary
+import com.halo.sdk.runtime.MemoryRecord
+import com.halo.sdk.runtime.NodeIdentity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
@@ -19,12 +24,15 @@ import java.util.UUID
 import javax.sql.DataSource
 
 /**
- * Linux filesystem-based storage implementation.
+ * Linux filesystem-based structured storage implementation.
  * 
  * Uses XDG Base Directory Specification for data locations,
  * with SQLite for structured data and filesystem for blobs.
+ * 
+ * Migrations are applied as individual SQL statements within a transaction
+ * to avoid regex splitting issues with comments, quoted semicolons, and trigger bodies.
  */
-class LinuxStorage : Storage {
+class LinuxStorage : StructuredStorage {
     private val log = LoggerFactory.getLogger(LinuxStorage::class.java)
     
     private lateinit var dataDir: Path
@@ -32,22 +40,153 @@ class LinuxStorage : Storage {
     private lateinit var cacheDir: Path
     private lateinit var dbPath: Path
     private lateinit var dataSource: DataSource
+    
+    // Migration definitions - each migration is a list of complete SQL statements
+    private val migrations = listOf(
+        Migration(1, "Create core tables", listOf(
+            """
+                CREATE TABLE IF NOT EXISTS conversations (
+                    id TEXT PRIMARY KEY,
+                    title TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    provider_id TEXT,
+                    model_id TEXT,
+                    metadata TEXT
+                )
+            """.trimIndent(),
+            """
+                CREATE TABLE IF NOT EXISTS messages (
+                    id TEXT PRIMARY KEY,
+                    conversation_id TEXT NOT NULL,
+                    role TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    provider_id TEXT,
+                    model_id TEXT,
+                    tokens_used INTEGER,
+                    latency_ms INTEGER,
+                    created_at TEXT NOT NULL,
+                    metadata TEXT,
+                    FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+                )
+            """.trimIndent(),
+            "CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id)",
+            "CREATE INDEX IF NOT EXISTS idx_messages_created ON messages(created_at)",
+            """
+                CREATE TABLE IF NOT EXISTS memories (
+                    id TEXT PRIMARY KEY,
+                    content TEXT NOT NULL,
+                    source TEXT,
+                    scope TEXT,
+                    confidence REAL,
+                    expires_at TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    metadata TEXT
+                )
+            """.trimIndent(),
+            "CREATE INDEX IF NOT EXISTS idx_memories_scope ON memories(scope)",
+            "CREATE INDEX IF NOT EXISTS idx_memories_expires ON memories(expires_at)",
+            """
+                CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
+                    content, source, scope,
+                    content='memories', content_rowid='rowid'
+                )
+            """.trimIndent(),
+            """
+                CREATE TRIGGER IF NOT EXISTS memories_ai AFTER INSERT ON memories BEGIN
+                    INSERT INTO memories_fts(rowid, content, source, scope) VALUES (new.rowid, new.content, new.source, new.scope);
+                END
+            """.trimIndent(),
+            """
+                CREATE TRIGGER IF NOT EXISTS memories_ad AFTER DELETE ON memories BEGIN
+                    INSERT INTO memories_fts(memories_fts, rowid, content, source, scope) VALUES ('delete', old.rowid, old.content, old.source, old.scope);
+                END
+            """.trimIndent(),
+            """
+                CREATE TRIGGER IF NOT EXISTS memories_au AFTER UPDATE ON memories BEGIN
+                    INSERT INTO memories_fts(memories_fts, rowid, content, source, scope) VALUES ('delete', old.rowid, old.content, old.source, old.scope);
+                    INSERT INTO memories_fts(rowid, content, source, scope) VALUES (new.rowid, new.content, new.source, new.scope);
+                END
+            """.trimIndent(),
+        )),
+        Migration(2, "Add node identity and sync tables", listOf(
+            """
+                CREATE TABLE IF NOT EXISTS node_identity (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+            """.trimIndent(),
+            """
+                CREATE TABLE IF NOT EXISTS sync_peers (
+                    id TEXT PRIMARY KEY,
+                    name TEXT,
+                    public_key TEXT NOT NULL,
+                    trust_state TEXT NOT NULL,
+                    capabilities TEXT,
+                    last_seen TEXT,
+                    created_at TEXT NOT NULL,
+                    metadata TEXT
+                )
+            """.trimIndent(),
+        )),
+        Migration(3, "Add agent runs and event journal for crash recovery", listOf(
+            """
+                CREATE TABLE IF NOT EXISTS agent_runs (
+                    run_id TEXT PRIMARY KEY,
+                    interaction_id TEXT NOT NULL,
+                    conversation_id TEXT,
+                    origin_node_id TEXT,
+                    status TEXT NOT NULL,
+                    attempt INTEGER NOT NULL DEFAULT 0 CHECK(attempt >= 0),
+                    revision INTEGER NOT NULL DEFAULT 0 CHECK(revision >= 0),
+                    checkpoint_ref TEXT,
+                    provider_id TEXT,
+                    model_id TEXT,
+                    failure_category TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+            """.trimIndent(),
+            "CREATE INDEX IF NOT EXISTS idx_agent_runs_status_updated ON agent_runs(status, updated_at)",
+            """
+                CREATE TABLE IF NOT EXISTS agent_run_events (
+                    event_id TEXT PRIMARY KEY,
+                    run_id TEXT NOT NULL REFERENCES agent_runs(run_id) ON DELETE CASCADE,
+                    sequence INTEGER NOT NULL,
+                    event_type TEXT NOT NULL,
+                    schema_version INTEGER NOT NULL DEFAULT 1,
+                    payload_ref TEXT,
+                    correlation_id TEXT,
+                    created_at TEXT NOT NULL,
+                    UNIQUE(run_id, sequence)
+                )
+            """.trimIndent(),
+        )),
+    )
+    
+    data class Migration(
+        val version: Int,
+        val description: String,
+        val statements: List<String>
+    )
 
-    override suspend fun initialize(config: Storage.Config) {
-        log.info("Initializing Linux storage...")
+    override suspend fun initialize(config: StructuredStorageConfig) = withContext(Dispatchers.IO) {
+        log.info("Initializing Linux structured storage...")
         
         // Determine data directories using XDG spec
         val home = Paths.get(System.getProperty("user.home"))
-        val xdgDataHome = System.getenv("XDG_DATA_HOME")?.let { Paths.get(it) } 
+        val xdgDataHome = System.getenv("XDG_DATA_HOME")?.let { Paths.get(it) }
             ?: home.resolve(".local/share")
-        val xdgConfigHome = System.getenv("XDG_CONFIG_HOME")?.let { Paths.get(it) } 
+        val xdgConfigHome = System.getenv("XDG_CONFIG_HOME")?.let { Paths.get(it) }
             ?: home.resolve(".config")
-        val xdgCacheHome = System.getenv("XDG_CACHE_HOME")?.let { Paths.get(it) } 
+        val xdgCacheHome = System.getenv("XDG_CACHE_HOME")?.let { Paths.get(it) }
             ?: home.resolve(".cache")
         
-        dataDir = xdgDataHome.resolve("halo-linux")
-        configDir = xdgConfigHome.resolve("halo-linux")
-        cacheDir = xdgCacheHome.resolve("halo-linux")
+        dataDir = config.dataDir?.let { Paths.get(it) } ?: xdgDataHome.resolve("halo-linux")
+        configDir = config.configDir?.let { Paths.get(it) } ?: xdgConfigHome.resolve("halo-linux")
+        cacheDir = config.cacheDir?.let { Paths.get(it) } ?: xdgCacheHome.resolve("halo-linux")
         dbPath = dataDir.resolve("halo.db")
         
         // Create directories
@@ -65,11 +204,11 @@ class LinuxStorage : Storage {
         // Initialize SQLite database
         initializeDatabase()
         
-        log.info("Linux storage initialized at: ${dataDir}")
+        log.info("Linux structured storage initialized at: ${dataDir}")
     }
-
+    
     private fun initializeDatabase() {
-        val url = "jdbc:sqlite:${dbPath.toAbsolutePath()}?journal_mode=WAL&foreign_keys=on"
+        val url = "jdbc:sqlite:${dbPath.toAbsolutePath()}?journal_mode=WAL&foreign_keys=on&busy_timeout=5000"
         dataSource = object : DataSource {
             override fun getConnection(): Connection = DriverManager.getConnection(url)
             override fun getConnection(username: String, password: String): Connection = getConnection()
@@ -84,115 +223,49 @@ class LinuxStorage : Storage {
         // Run migrations
         runMigrations()
     }
-
+    
     private fun runMigrations() {
         dataSource.getConnection().use { conn ->
-            conn.createStatement().execute("""
-                CREATE TABLE IF NOT EXISTS schema_version (
-                    version INTEGER PRIMARY KEY,
-                    applied_at TEXT NOT NULL,
-                    description TEXT
-                )
-            """.trimIndent())
-            
-            val currentVersion = conn.createStatement()
-                .executeQuery("SELECT COALESCE(MAX(version), 0) FROM schema_version")
-                .use { rs -> if (rs.next()) rs.getInt(1) else 0 }
-            
-            val migrations = listOf(
-                1 to "Create core tables" to """
-                    CREATE TABLE IF NOT EXISTS conversations (
-                        id TEXT PRIMARY KEY,
-                        title TEXT,
-                        created_at TEXT NOT NULL,
-                        updated_at TEXT NOT NULL,
-                        provider_id TEXT,
-                        model_id TEXT,
-                        metadata TEXT
-                    );
-                    
-                    CREATE TABLE IF NOT EXISTS messages (
-                        id TEXT PRIMARY KEY,
-                        conversation_id TEXT NOT NULL,
-                        role TEXT NOT NULL,
-                        content TEXT NOT NULL,
-                        provider_id TEXT,
-                        model_id TEXT,
-                        tokens_used INTEGER,
-                        latency_ms INTEGER,
-                        created_at TEXT NOT NULL,
-                        metadata TEXT,
-                        FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
-                    );
-                    
-                    CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id);
-                    CREATE INDEX IF NOT EXISTS idx_messages_created ON messages(created_at);
-                    
-                    CREATE TABLE IF NOT EXISTS memories (
-                        id TEXT PRIMARY KEY,
-                        content TEXT NOT NULL,
-                        source TEXT,
-                        scope TEXT,
-                        confidence REAL,
-                        expires_at TEXT,
-                        created_at TEXT NOT NULL,
-                        updated_at TEXT NOT NULL,
-                        metadata TEXT
-                    );
-                    
-                    CREATE INDEX IF NOT EXISTS idx_memories_scope ON memories(scope);
-                    CREATE INDEX IF NOT EXISTS idx_memories_expires ON memories(expires_at);
-                    
-                    CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
-                        content, source, scope,
-                        content='memories', content_rowid='rowid'
-                    );
-                    
-                    CREATE TRIGGER IF NOT EXISTS memories_ai AFTER INSERT ON memories BEGIN
-                        INSERT INTO memories_fts(rowid, content, source, scope) VALUES (new.rowid, new.content, new.source, new.scope);
-                    END;
-                    
-                    CREATE TRIGGER IF NOT EXISTS memories_ad AFTER DELETE ON memories BEGIN
-                        INSERT INTO memories_fts(memories_fts, rowid, content, source, scope) VALUES ('delete', old.rowid, old.content, old.source, old.scope);
-                    END;
-                    
-                    CREATE TRIGGER IF NOT EXISTS memories_au AFTER UPDATE ON memories BEGIN
-                        INSERT INTO memories_fts(memories_fts, rowid, content, source, scope) VALUES ('delete', old.rowid, old.content, old.source, old.scope);
-                        INSERT INTO memories_fts(rowid, content, source, scope) VALUES (new.rowid, new.content, new.source, new.scope);
-                    END;
-                """,
-                2 to "Add node identity table" to """
-                    CREATE TABLE IF NOT EXISTS node_identity (
-                        key TEXT PRIMARY KEY,
-                        value TEXT NOT NULL,
-                        updated_at TEXT NOT NULL
-                    );
-                    
-                    CREATE TABLE IF NOT EXISTS sync_peers (
-                        id TEXT PRIMARY KEY,
-                        name TEXT,
-                        public_key TEXT NOT NULL,
-                        trust_state TEXT NOT NULL,
-                        capabilities TEXT,
-                        last_seen TEXT,
-                        created_at TEXT NOT NULL,
-                        metadata TEXT
-                    );
-                """,
-            )
-            
-            for ((version, description, sql) in migrations) {
-                if (version > currentVersion) {
-                    log.info("Applying migration $version: $description")
-                    conn.createStatement().execute(sql)
-                    conn.prepareStatement("INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)")
-                        .use { stmt ->
-                            stmt.setInt(1, version)
-                            stmt.setString(2, Instant.now().toString())
-                            stmt.setString(3, description)
-                            stmt.executeUpdate()
+            conn.setAutoCommit(false)
+            try {
+                conn.createStatement().execute("""
+                    CREATE TABLE IF NOT EXISTS schema_version (
+                        version INTEGER PRIMARY KEY,
+                        applied_at TEXT NOT NULL,
+                        description TEXT
+                    )
+                """.trimIndent())
+                
+                val currentVersion = conn.createStatement()
+                    .executeQuery("SELECT COALESCE(MAX(version), 0) FROM schema_version")
+                    .use { rs -> if (rs.next()) rs.getInt(1) else 0 }
+                
+                for (migration in migrations) {
+                    if (migration.version > currentVersion) {
+                        log.info("Applying migration ${migration.version}: ${migration.description}")
+                        
+                        // Execute each statement individually within the transaction
+                        for (statement in migration.statements) {
+                            conn.createStatement().execute(statement)
                         }
+                        
+                        conn.prepareStatement("INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)")
+                            .use { stmt ->
+                                stmt.setInt(1, migration.version)
+                                stmt.setString(2, Instant.now().toString())
+                                stmt.setString(3, migration.description)
+                                stmt.executeUpdate()
+                            }
+                    }
                 }
+                
+                conn.commit()
+            } catch (e: Exception) {
+                log.error("Migration failed, rolling back: ${e.message}")
+                conn.rollback()
+                throw e
+            } finally {
+                conn.setAutoCommit(true)
             }
         }
     }
@@ -250,6 +323,8 @@ class LinuxStorage : Storage {
             } catch (e: Exception) {
                 conn.rollback()
                 throw e
+            } finally {
+                conn.setAutoCommit(true)
             }
         }
     }
@@ -327,6 +402,10 @@ class LinuxStorage : Storage {
 
     override suspend fun searchMemories(query: String, limit: Int = 20): List<MemoryRecord> = withContext(Dispatchers.IO) {
         dataSource.getConnection().use { conn ->
+            // Sanitize FTS query to prevent injection
+            val sanitizedQuery = query.replace("\"", "").replace("'", "").trim()
+            if (sanitizedQuery.isBlank()) return@withContext emptyList()
+            
             conn.prepareStatement("""
                 SELECT m.* FROM memories m
                 JOIN memories_fts f ON m.rowid = f.rowid
@@ -334,7 +413,7 @@ class LinuxStorage : Storage {
                 ORDER BY rank
                 LIMIT ?
             """.trimIndent()).use { stmt ->
-                stmt.setString(1, query)
+                stmt.setString(1, sanitizedQuery)
                 stmt.setInt(2, limit)
                 stmt.executeQuery().use { rs ->
                     val results = mutableListOf<MemoryRecord>()
@@ -441,12 +520,14 @@ class LinuxStorage : Storage {
             } catch (e: Exception) {
                 conn.rollback()
                 throw e
+            } finally {
+                conn.setAutoCommit(true)
             }
         }
     }
 
     override suspend fun close() = withContext(Dispatchers.IO) {
-        log.info("Closing Linux storage")
+        log.info("Closing Linux structured storage")
         // HikariCP would be used in production for connection pooling
     }
 }
@@ -458,75 +539,4 @@ data class LinuxStorageConfig(
     val dataDir: String? = null,
     val configDir: String? = null,
     val cacheDir: String? = null,
-)
-
-/**
- * Conversation record with messages.
- */
-data class ConversationRecord(
-    val id: String,
-    val title: String,
-    val createdAt: Instant,
-    val updatedAt: Instant,
-    val providerId: String?,
-    val modelId: String?,
-    val metadata: String?,
-    val messages: List<MessageRecord> = emptyList(),
-)
-
-/**
- * Individual message in a conversation.
- */
-data class MessageRecord(
-    val id: String,
-    val conversationId: String,
-    val role: String,
-    val content: String,
-    val providerId: String?,
-    val modelId: String?,
-    val tokensUsed: Long,
-    val latencyMs: Long,
-    val createdAt: Instant,
-    val metadata: String?,
-)
-
-/**
- * Lightweight conversation summary for listings.
- */
-data class ConversationSummary(
-    val id: String,
-    val title: String,
-    val createdAt: Instant,
-    val updatedAt: Instant,
-    val providerId: String?,
-    val modelId: String?,
-)
-
-/**
- * Memory record for personal knowledge.
- */
-data class MemoryRecord(
-    val id: String,
-    val content: String,
-    val source: String?,
-    val scope: String?,
-    val confidence: Double,
-    val expiresAt: Instant?,
-    val createdAt: Instant,
-    val updatedAt: Instant,
-    val metadata: String?,
-)
-
-/**
- * Persistent node identity for sync.
- */
-data class NodeIdentity(
-    val nodeId: String,
-    val displayName: String,
-    val publicKey: String,
-    val privateKey: String,
-    val protocolVersion: Int,
-    val softwareVersion: String,
-    val capabilities: List<String>,
-    val trustState: String,
-)
+) : StructuredStorageConfig(dataDir, configDir, cacheDir)

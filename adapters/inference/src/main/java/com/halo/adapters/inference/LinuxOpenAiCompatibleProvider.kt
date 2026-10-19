@@ -5,7 +5,6 @@ import com.halo.sdk.provider.AiCapability
 import com.halo.sdk.provider.AiContext
 import com.halo.sdk.provider.AiInferenceProvider
 import com.halo.sdk.provider.AiModel
-import com.halo.sdk.provider.AiProvider
 import com.halo.sdk.provider.AiProviderException
 import com.halo.sdk.provider.AiRequest
 import com.halo.sdk.provider.AiResponse
@@ -29,6 +28,8 @@ import com.halo.sdk.provider.ProviderReadiness
 import com.halo.sdk.provider.Recoverability
 import com.halo.sdk.provider.AiFailureDetails
 import com.halo.sdk.provider.AiErrorType
+import com.halo.sdk.provider.ProviderProtocol
+import com.halo.sdk.provider.ProviderAccessKind
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -42,8 +43,9 @@ import org.slf4j.LoggerFactory
 /**
  * Linux-specific OpenAI-compatible inference provider.
  * 
- * This provider connects to local or remote OpenAI-compatible endpoints
- * (Ollama, llama.cpp server, vLLM, etc.) for text generation.
+ * This provider delegates to the generic ConfiguredOpenAiCompatibleProvider
+ * for shared OpenAI-compatible logic, while preserving Linux-specific
+ * configuration and auth-free local endpoint support.
  */
 class LinuxOpenAiCompatibleProvider(
     private val config: LinuxProviderConfig,
@@ -56,162 +58,56 @@ class LinuxOpenAiCompatibleProvider(
 
     private val log = LoggerFactory.getLogger(LinuxOpenAiCompatibleProvider::class.java)
 
+    private val descriptor = com.halo.sdk.provider.RemoteProviderDescriptor(
+        id = config.id,
+        displayName = config.displayName,
+        protocol = config.protocol,
+        authKinds = if (config.authKind == ProviderAuthKind.NONE) setOf(ProviderAuthKind.NONE) else setOf(config.authKind),
+        accessKind = config.accessKind,
+        modelDiscovery = config.modelDiscovery,
+        capabilities = config.capabilities,
+        executionLocation = config.executionLocation,
+    )
+
+    private val delegate = com.halo.sdk.provider.ConfiguredOpenAiCompatibleProvider(
+        descriptor = descriptor,
+        transport = transport,
+        credentialProvider = credentialProvider,
+        systemPrompt = systemPrompt,
+        allowInsecureLocalCredentialTransport = config.allowInsecureLocalCredentialTransport,
+        optionalHeaders = optionalHeaders,
+        freeModelIds = config.freeModelIds,
+        fallbackWhenUnauthenticated = config.fallbackWhenUnauthenticated,
+        staticHints = staticHints,
+    )
+
     override val configurationDescriptor: ProviderConfigurationDescriptor
-        get() = ProviderConfigurationDescriptor(
-            config.id,
-            config.displayName,
-            config.executionLocation,
-            if (config.authKind != ProviderAuthKind.NONE)
-                listOf(ProviderConfigurationField("credential", "API key / token", ProviderFieldKind.SECRET))
-            else emptyList(),
-            config.protocol.name,
-            config.accessKind.name,
-        )
+        get() = delegate.configurationDescriptor
 
-    override fun setCredential(credential: Credential) {
-        credentialProvider.setCredential(credential)
-        configurationChanged()
-    }
+    override fun setCredential(credential: Credential) = delegate.setCredential(credential)
+    override fun clearCredential() = delegate.clearCredential()
+    override val id: String get() = delegate.id
+    override val displayName: String get() = delegate.displayName
+    override val isLocal: Boolean get() = delegate.isLocal
+    override val status: StateFlow<ProviderStatus> = delegate.status
+    val authInfo: StateFlow<ProviderAuthInfo> = delegate.authInfo
 
-    override fun clearCredential() {
-        credentialProvider.clearCredential()
-        configurationChanged()
-    }
+    override fun configurationChanged() = delegate.configurationChanged()
 
-    override val id: String get() = config.id
-    override val displayName: String get() = config.displayName
-    override val isLocal: Boolean get() = config.executionLocation == AiExecutionLocation.LOCAL_NETWORK
+    override suspend fun getCapabilities(): Set<AiCapability> = delegate.getCapabilities()
 
-    private val _status = MutableStateFlow(ProviderStatus.UNCONFIGURED)
-    override val status: StateFlow<ProviderStatus> = _status.asStateFlow()
+    override suspend fun getStatus(): ProviderStatus = delegate.getStatus()
 
-    private val _authInfo = MutableStateFlow(ProviderAuthInfo(
-        authKind = config.authKind,
-        authState = if (credentialProvider.hasCredential()) ProviderAuthState.CONFIGURED else ProviderAuthState.NOT_CONFIGURED,
-    ))
-    val authInfo: StateFlow<ProviderAuthInfo> = _authInfo.asStateFlow()
+    override suspend fun testConnection(): Boolean = delegate.testConnection()
 
-    override fun configurationChanged() {
-        _status.value = if (credentialProvider.hasCredential()) configuredCold() else ProviderStatus.UNCONFIGURED
-        _authInfo.value = _authInfo.value.copy(authState = if (credentialProvider.hasCredential()) ProviderAuthState.CONFIGURED else ProviderAuthState.NOT_CONFIGURED)
-    }
+    override suspend fun generate(request: AiRequest, context: AiContext): AiResponse = delegate.generate(request, context)
 
-    override suspend fun getCapabilities(): Set<AiCapability> = config.capabilities
+    override fun stream(request: AiRequest, context: AiContext): Flow<AiStreamEvent> = delegate.stream(request, context)
 
-    override suspend fun getStatus(): ProviderStatus = withContext(Dispatchers.IO) {
-        _status.value = when {
-            !credentialProvider.hasCredential() -> ProviderStatus.UNCONFIGURED
-            _status.value.state == ProviderStatus.State.UNCONFIGURED -> configuredCold()
-            else -> _status.value
-        }
-        _status.value
-    }
+    override suspend fun listModels(): List<AiModel> = delegate.listModels()
 
-    override suspend fun testConnection(): Boolean = withContext(Dispatchers.IO) {
-        val cred = credentialProvider.credential()
-        if (cred == null) return@withContext false
-        val (header, value) = credentialHeader(cred)
-        try {
-            transport.testConnection(header, value, config.allowInsecureLocalCredentialTransport).also { ok ->
-                if (ok) setAuthState(ProviderAuthState.CONNECTED)
-            }
-        } catch (e: AiProviderException) {
-            setAuthState(if (e.type == AiErrorType.AUTHENTICATION_FAILED) ProviderAuthState.FAILED else ProviderAuthState.FAILED, e.message)
-            false
-        }
-    }
-
-    override suspend fun generate(request: AiRequest, context: AiContext): AiResponse {
-        val cred = credentialProvider.credential() ?: throw missingCredential()
-        val (header, value) = credentialHeader(cred)
-        val model = request.modelId?.takeIf { it.isNotBlank() }
-            ?: throw AiProviderException(AiErrorType.MODEL_NOT_SELECTED, "Select a ${displayName} model first")
-        
-        return try {
-            transport.generate(request, context, model, header, value, systemPrompt, config.allowInsecureLocalCredentialTransport).also {
-                if (it.text.isNotBlank() || it.toolCalls.isNotEmpty()) setAuthState(ProviderAuthState.CONNECTED)
-            }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: AiProviderException) {
-            if (e.type == AiErrorType.AUTHENTICATION_FAILED) setAuthState(ProviderAuthState.EXPIRED, e.message)
-            throw e
-        }
-    }
-
-    override fun stream(request: AiRequest, context: AiContext): Flow<AiStreamEvent> = flow {
-        val cred = credentialProvider.credential() ?: throw missingCredential()
-        val (header, value) = credentialHeader(cred)
-        val model = request.modelId?.takeIf { it.isNotBlank() }
-            ?: throw AiProviderException(AiErrorType.MODEL_NOT_SELECTED, "Select a ${displayName} model first")
-        transport.stream(request, context, model, header, value, systemPrompt, config.allowInsecureLocalCredentialTransport).collect { emit(it) }
-    }
-
-    override suspend fun listModels(): List<AiModel> = withContext(Dispatchers.IO) {
-        when (config.modelDiscovery) {
-            ModelDiscoveryMode.STATIC_HINTS -> staticHints.ifEmpty { fallbackStaticModels() }
-            ModelDiscoveryMode.REMOTE_CATALOG -> {
-                val cred = credentialProvider.credential()
-                if (cred == null) return@withContext emptyList()
-                val (header, value) = credentialHeader(cred)
-                try {
-                    transport.fetchRemoteModelList(header, value, config.allowInsecureLocalCredentialTransport, staticHints, config.freeModelIds, config.fallbackWhenUnauthenticated).also {
-                        if (it.isNotEmpty()) setAuthState(ProviderAuthState.CONNECTED)
-                    }
-                } catch (e: AiProviderException) {
-                    if (e.type == AiErrorType.AUTHENTICATION_FAILED) setAuthState(ProviderAuthState.EXPIRED, e.message)
-                    throw e
-                }
-            }
-            ModelDiscoveryMode.NONE -> emptyList()
-        }.map { it.copy(executionLocation = config.executionLocation) }
-    }
-
-    fun setAuthState(state: ProviderAuthState, failure: String? = null) {
-        _authInfo.value = _authInfo.value.copy(authState = state, lastAuthFailure = failure)
-    }
-
-    fun setQuotaSnapshot(snapshot: ProviderQuotaSnapshot) {
-        _authInfo.value = _authInfo.value.copy(quotaSnapshot = snapshot)
-    }
-
-    private fun credentialHeader(cred: Credential): Pair<String?, String?> = when {
-        cred.id.endsWith(".none") -> null to null
-        cred.id.endsWith(".bearer") || cred.id.endsWith(".token") -> "Authorization" to "Bearer ${cred.value}"
-        cred.id.endsWith(".api_key") -> "Authorization" to "Bearer ${cred.value}"
-        config.authKind == ProviderAuthKind.API_KEY -> "Authorization" to "Bearer ${cred.value}"
-        config.authKind == ProviderAuthKind.BEARER_TOKEN -> "Authorization" to "Bearer ${cred.value}"
-        config.authKind == ProviderAuthKind.GOOGLE_OAUTH -> "Authorization" to "Bearer ${cred.value}"
-        config.authKind == ProviderAuthKind.DEVICE_OAUTH -> "Authorization" to "Bearer ${cred.value}"
-        config.authKind == ProviderAuthKind.NONE -> null to null
-        else -> "Authorization" to "Bearer ${cred.value}"
-    }
-
-    private fun missingCredential() = AiProviderException(
-        AiErrorType.AUTHENTICATION_FAILED,
-        "${displayName} is not configured",
-        AiFailureDetails(recoverability = Recoverability.USER_ACTION_REQUIRED),
-    )
-
-    private fun configuredCold() = ProviderStatus(
-        ProviderStatus.State.STANDBY,
-        "Configured; check connection to verify access",
-        ProviderReadiness.ConfiguredCold,
-    )
-
-    private fun fallbackStaticModels(): List<AiModel> = staticHints.ifEmpty {
-        listOf(
-            AiModel(
-                id = "default",
-                displayName = displayName,
-                providerId = id,
-                inputCapabilities = setOf(AiCapability.TEXT),
-                contextLength = null,
-                supportsStreaming = true,
-                supportsTools = false,
-            ),
-        )
-    }
+    fun setAuthState(state: ProviderAuthState, failure: String? = null) = delegate.setAuthState(state, failure)
+    fun setQuotaSnapshot(snapshot: ProviderQuotaSnapshot) = delegate.setQuotaSnapshot(snapshot)
 }
 
 /**
@@ -223,8 +119,8 @@ data class LinuxProviderConfig(
     val baseUrl: String,
     val executionLocation: AiExecutionLocation = AiExecutionLocation.LOCAL_NETWORK,
     val authKind: ProviderAuthKind = ProviderAuthKind.BEARER_TOKEN,
-    val accessKind: com.halo.sdk.provider.ProviderAccessKind = com.halo.sdk.provider.ProviderAccessKind.REMOTE,
-    val protocol: com.halo.sdk.provider.ProviderProtocol = com.halo.sdk.provider.ProviderProtocol.OPENAI_COMPATIBLE,
+    val accessKind: ProviderAccessKind = ProviderAccessKind.REMOTE,
+    val protocol: ProviderProtocol = ProviderProtocol.OPENAI_COMPATIBLE,
     val modelDiscovery: ModelDiscoveryMode = ModelDiscoveryMode.REMOTE_CATALOG,
     val capabilities: Set<AiCapability> = setOf(AiCapability.TEXT, AiCapability.STREAMING),
     val freeModelIds: Set<String> = emptySet(),
@@ -248,7 +144,8 @@ object LinuxProviderPresets {
             baseUrl = baseUrl,
             executionLocation = AiExecutionLocation.LOCAL,
             authKind = ProviderAuthKind.NONE,
-            accessKind = com.halo.sdk.provider.ProviderAccessKind.LOCAL,
+            accessKind = ProviderAccessKind.LOCAL,
+            protocol = ProviderProtocol.OPENAI_COMPATIBLE,
             modelDiscovery = ModelDiscoveryMode.REMOTE_CATALOG,
         )
     }
@@ -263,7 +160,8 @@ object LinuxProviderPresets {
             baseUrl = baseUrl,
             executionLocation = AiExecutionLocation.LOCAL,
             authKind = ProviderAuthKind.NONE,
-            accessKind = com.halo.sdk.provider.ProviderAccessKind.LOCAL,
+            accessKind = ProviderAccessKind.LOCAL,
+            protocol = ProviderProtocol.OPENAI_COMPATIBLE,
             modelDiscovery = ModelDiscoveryMode.REMOTE_CATALOG,
         )
     }
@@ -282,6 +180,7 @@ object LinuxProviderPresets {
             displayName = displayName,
             baseUrl = baseUrl,
             authKind = authKind,
+            protocol = ProviderProtocol.OPENAI_COMPATIBLE,
         )
     }
 }

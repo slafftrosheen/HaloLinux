@@ -178,18 +178,3 @@ class ConfiguredOpenAiCompatibleProvider(
         )
     }
 }
-
-/** Minimal credential contract used by remote presets. */
-interface CredentialProvider {
-    fun hasCredential(): Boolean
-    fun credential(): Credential?
-    fun setCredential(credential: Credential)
-    fun clearCredential()
-}
-
-/** Portable credential reference. Values are never logged. */
-data class Credential(
-    val id: String,
-    val value: String,
-    val label: String? = null,
-)

@@ -161,6 +161,40 @@ enum class ProviderAccessKind {
 }
 
 /**
+ * Wire protocol used by a remote provider.
+ *
+ * This determines the request/response format and endpoint paths.
+ */
+enum class ProviderProtocol {
+    OPENAI_CHAT_COMPLETIONS,
+    OPENAI_RESPONSES,
+    ANTHROPIC_MESSAGES,
+    GEMINI_GENERATE_CONTENT,
+    OLLAMA,
+    LITERT_NATIVE,
+    OPENAI_COMPATIBLE
+}
+
+/**
+ * Minimal credential contract used by remote presets.
+ */
+interface CredentialProvider {
+    fun hasCredential(): Boolean
+    fun credential(): Credential?
+    fun setCredential(credential: Credential)
+    fun clearCredential()
+}
+
+/**
+ * Portable credential reference. Values are never logged.
+ */
+data class Credential(
+    val id: String,
+    val value: String,
+    val label: String? = null,
+)
+
+/**
  * Lifecycle/auth state for a remote provider.
  *
  * This is separate from [ProviderStatus] because OAuth and companion flows have

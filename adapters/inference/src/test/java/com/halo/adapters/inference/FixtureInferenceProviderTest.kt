@@ -70,7 +70,8 @@ class FixtureInferenceProviderTest {
         assertEquals(2, events.size)
         assertTrue(events[0] is AiStreamEvent.TextDelta)
         assertEquals("Streaming response", (events[0] as AiStreamEvent.TextDelta).text)
-        assertTrue(events[1] is AiStreamEvent.Done)
+        assertTrue(events[1] is AiStreamEvent.Completed)
+        assertEquals("Streaming response", (events[1] as AiStreamEvent.Completed).response.text)
     }
 
     @Test

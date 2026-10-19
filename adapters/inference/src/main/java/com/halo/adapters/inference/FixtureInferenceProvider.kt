@@ -90,7 +90,11 @@ class FixtureInferenceProvider(
         
         // Emit as a single chunk for simplicity
         emit(AiStreamEvent.TextDelta(response))
-        emit(AiStreamEvent.Done)
+        emit(AiStreamEvent.Completed(AiResponse(
+            text = response,
+            providerId = id,
+            modelId = request.modelId,
+        )))
     }
 
     override suspend fun listModels(): List<AiModel> = withContext(Dispatchers.IO) {

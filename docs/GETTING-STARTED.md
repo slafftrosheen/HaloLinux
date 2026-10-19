@@ -54,9 +54,6 @@ cd HaloLinux
 
 # Run tests
 ./gradlew test
-
-# Build the halo-node application (fat JAR)
-./gradlew :host:linux:shadowJar
 ```
 
 ## Running HaloLinux
@@ -78,7 +75,9 @@ cd HaloLinux
 
 ### Using the Built JAR
 ```bash
-# After ./gradlew :host:linux:shadowJar
+# Build the application JAR
+./gradlew :host:linux:jar
+
 JAR_PATH=$(find host/linux/build/libs -name "*.jar" | grep -v sources | grep -v javadoc | head -1)
 
 java -jar "$JAR_PATH" --version
@@ -105,28 +104,32 @@ journalctl --user -u halo-node -f
 
 ## Configuration
 
-Create a configuration file at `~/.config/halo-linux/config.yaml`:
+HaloLinux stores configuration in SQLite preferences (not YAML). Use the CLI to configure:
 
-```yaml
-node:
-  display_name: "My Halo Node"
+```bash
+# Show current configuration
+halo-node config show
 
-inference:
-  provider: "ollama-local"
-  endpoint: "http://localhost:11434/v1"
-  model: "llama3.1:8b"
-  # For authenticated endpoints:
-  # api_key: "your-api-key"
+# Configure an OpenAI-compatible provider (e.g., Ollama)
+halo-node config set-provider \
+  --id ollama-local \
+  --name "Ollama (Local)" \
+  --url http://localhost:11434/v1 \
+  --auth none
 
-storage:
-  data_dir: "~/.local/share/halo-linux"
+# Configure a remote provider with API key
+halo-node config set-provider \
+  --id my-provider \
+  --name "My Provider" \
+  --url https://api.example.com/v1 \
+  --auth bearer \
+  --credential "sk-..."
 
-audio:
-  enabled: true
-
-sync:
-  enabled: false
+# Set default model
+halo-node config set-model "llama3.1:8b"
 ```
+
+Configuration is persisted in `~/.local/share/halo-linux/preferences.db`.
 
 ## Verifying Installation
 
@@ -136,11 +139,12 @@ halo-node doctor
 
 # Expected output includes:
 # - Java version (21+)
-# - CPU/memory info
-# - Audio system (ALSA/PipeWire)
-# - Network interfaces
-# - HaloLinux data directories
-# - Systemd service status
+# - OS/architecture info
+# - Directories (data, config, cache)
+# - Database migration status
+# - Audio system (ALSA availability)
+# - Inference provider status (if configured)
+# - Agent run store status (non-terminal runs)
 ```
 
 ## Troubleshooting
@@ -163,20 +167,31 @@ java -version
 # Check ALSA
 cat /proc/asound/cards
 
-# Check PipeWire
-pw-cli info 0
-
 # Install PipeWire if missing (Ubuntu)
 sudo apt install pipewire wireplumber
 ```
 
+Note: PipeWire device enumeration is not implemented to avoid unbounded external process calls. ALSA devices are reported with unknown capabilities (empty sample rates/formats) rather than fabricated values.
+
 ### "Inference provider not configured"
 ```bash
-# Configure Ollama
+# Configure a provider
 halo-node config show
-
-# Edit ~/.config/halo-linux/config.yaml with your provider details
+halo-node config set-provider --id ollama-local --name "Ollama" --url http://localhost:11434/v1 --auth none
 ```
+
+## CLI Commands Reference
+
+| Command | Description |
+|---------|-------------|
+| `halo-node --version` | Show version |
+| `halo-node doctor` | Run diagnostics |
+| `halo-node status` | Show node status |
+| `halo-node start` | Start daemon (foreground) |
+| `halo-node ask "query"` | Ask a question (requires provider) |
+| `halo-node config show` | Show configuration |
+| `halo-node config set-provider` | Configure inference provider |
+| `halo-node config set-model` | Set default model |
 
 ## Next Steps
 
@@ -186,3 +201,4 @@ halo-node config show
 4. Search memories: `halo-node ask "What's my favorite color?"`
 5. Review [Architecture](ARCHITECTURE.md) for system design
 6. Review [Pi 5 Setup](PI5-SETUP.md) for Raspberry Pi deployment
+7. Review [HALO-LINUX-003 Implementation Report](HALO-LINUX-003-IMPLEMENTATION-REPORT.md) for detailed changes

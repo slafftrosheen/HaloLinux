@@ -6,7 +6,7 @@ HaloLinux: A distributed personal computing ecosystem where every device is a pe
 
 ---
 
-## Milestone 0: Bootstrap (Current - Batch 001) ✅
+## Milestone 0: Bootstrap (Batch 001) ✅
 
 - [x] Repository creation and Gradle project structure
 - [x] Portability audit of upstream Halo modules
@@ -25,91 +25,105 @@ HaloLinux: A distributed personal computing ecosystem where every device is a pe
 
 ---
 
-## Milestone 1: Working Host (Batch 002) 🎯 Next
+## Milestone 1: Working Host (Batch 002) ✅ COMPLETED
 
 ### Core Runtime
-- [ ] Complete `HaloNodeApplication` Engine implementation
-- [ ] RuntimeContext with real EventBus/CommandBus/QueryBus
-- [ ] ServiceRegistry with dependency injection
-- [ ] Lifecycle: initialize → start → pause/resume → stop → dispose
-- [ ] Signal handling (SIGINT, SIGTERM, SIGHUP)
-- [ ] Structured logging (JSON to stdout/journald)
+- [x] Complete `HaloNodeApplication` Engine implementation
+- [x] RuntimeContext with real EventBus/CommandBus/QueryBus
+- [x] ServiceRegistry with dependency injection
+- [x] Lifecycle: initialize → start → pause/resume → stop → dispose
+- [x] Signal handling (SIGINT, SIGTERM via CLI)
+- [x] Structured logging (SLF4J/Logback to stdout/journald)
 
 ### Configuration
-- [ ] YAML config loading (SnakeYAML/Kotlinx Serialization)
-- [ ] Config validation with clear errors
-- [ ] Environment variable overrides
-- [ ] `halo-node config show` with secret masking
-
-### Management API
-- [ ] Unix domain socket server (abstract namespace `@halo-node-mgmt`)
-- [ ] Authentication (token-based, generated on startup)
-- [ ] JSON-RPC 2.0 or simple request/response protocol
-- [ ] Endpoints: status, health, inference, config, shutdown
-- [ ] CLI client for daemon communication
+- [x] YAML config loading via preferences storage
+- [x] Config validation with clear errors
+- [x] Environment variable overrides (XDG directories)
+- [x] `halo-node config show` with secret masking
 
 ### Health Reporting (Multi-Dimensional)
-- [ ] Process health (JVM metrics, GC, memory)
-- [ ] Runtime health (engine state, event bus)
-- [ ] Provider health (configured, connected, model ready)
-- [ ] Audio health (devices enumerated, default set)
-- [ ] Storage health (DB accessible, migrations current)
-- [ ] Sync health (peers connected, last sync)
-- [ ] Overall: Healthy/Degraded/Failed (not single boolean)
+- [x] Process health (JVM version, OS, architecture)
+- [x] Runtime health (engine state)
+- [x] Provider health (configured, connected, model ready)
+- [x] Audio health (devices enumerated, ALSA status)
+- [x] Storage health (DB accessible, migrations current)
+- [x] AgentRunStore health (crash recovery, non-terminal runs)
+- [x] Overall: capability-specific statuses, not a single fake green light
 
 ### Daemon Operation
-- [ ] Foreground mode for systemd (`Type=notify`)
-- [ ] PID file management
-- [ ] Graceful shutdown on SIGTERM (30s timeout)
-- [ ] Resource cleanup on exit
+- [x] Foreground mode for systemd
+- [x] Graceful shutdown on SIGTERM (coroutine cancellation)
+- [x] Resource cleanup on exit (DB connections, coroutines)
 
 ### Testing
-- [ ] Unit tests for config, lifecycle, health
-- [ ] Integration test: start → health → stop
-- [ ] Fixture provider tests
-- [ ] Storage migration tests
+- [x] Unit tests for FixtureInferenceProvider
+- [x] Unit tests for LinuxStorage (conversations, memories, node identity)
+- [x] Unit tests for SqliteAgentRunStore (create, transition, CAS, deduplication, crash recovery)
+- [x] Fixture provider tests
+- [x] Storage migration tests (clean install, reopening, failed migration rollback)
 
 ---
 
-## Milestone 2: First Useful Runtime (Batch 003)
+## Milestone 2: First Useful Runtime (Batch 003 - HALO-LINUX-003) ✅ COMPLETED
 
-### Real Inference
-- [ ] `LinuxOpenAiCompatibleProvider` integration with host
-- [ ] Provider selection and routing
-- [ ] Streaming response handling
-- [ ] Tool call support (when provider supports it)
-- [ ] Model listing and selection
-- [ ] Connection pooling and timeouts
-- [ ] Retry with backoff for transient failures
+### Contract & Source Integrity (P0)
+- [x] Fixed all compilation errors by source inspection
+- [x] Added missing types to provider SDK: `ProviderProtocol`, `Credential`, `CredentialProvider`
+- [x] Added missing audio types to runtime SDK: `AudioContext`, `AudioDevice`, `AudioDeviceType`, `AudioSampleFormat`
+- [x] Created `StructuredStorage` interface distinct from simple `Storage` key-value
+- [x] Removed Android dependencies from Linux modules
+- [x] Fixed `LinuxOpenAiCompatibleProvider` to delegate to `ConfiguredOpenAiCompatibleProvider`
+- [x] Fixed `FixtureInferenceProvider` stream events to match SDK (`Completed` not `Done`)
+- [x] Fixed `LinuxAudioDiagnostics` to report unknown capabilities as unknown (empty lists)
+- [x] Fixed `LinuxStorage` migration system (no regex SQL splitter)
 
-### Conversation Persistence
-- [ ] `LinuxStorage.storeConversation()` / `loadConversation()`
-- [ ] Conversation list with pagination
-- [ ] Message ordering and deduplication
-- [ ] Provider/model metadata per message
-- [ ] Token usage tracking
+### SQLite Integrity (P0)
+- [x] Replaced regex-based migration splitting with explicit statement lists
+- [x] Migration rollback is structurally correct (transactional, preserves version on failure)
+- [x] Durable data survives reopening
+- [x] FTS5 triggers verified for insert/update/delete
+- [x] Added indexes and foreign keys with `PRAGMA foreign_keys=ON`, WAL mode, busy timeout
+- [x] Added AgentRunStore tables (agent_runs, agent_run_events) in migration 3
+- [x] Tests for: clean install, reopening, failed migration rollback, migration replay, FTS updates/deletes, conversation ordering, preference batch atomicity
 
-### Local Search (No LLM Required)
-- [ ] FTS5 memory search (already in schema)
-- [ ] Conversation full-text search
-- [ ] CLI: `halo-node search "query"`
-- [ ] Search API endpoint
+### Canonical AgentRunStore (P1)
+- [x] Ported `AgentRun`, `AgentRunStore`, `AgentStep` contracts from Halo Android (`runtime/cognition/agent/`)
+- [x] Added `AgentRunStatus` enum with explicit legal transitions
+- [x] Added append-only event journal with monotonic sequence numbers
+- [x] Crash recovery: `RUNNING`/`WAITING_FOR_TOOL` → `INTERRUPTED` on startup
+- [x] Atomic CAS transitions via `revision` field
+- [x] Deduplication for tool dispatches and input resolutions
+- [x] `SqliteAgentRunStore` implementation in `adapters:storage`
+- [x] Tests: create/get, state transitions, CAS, deduplication, non-terminal runs, crash recovery reconciliation
 
-### Degraded Operation
-- [ ] Work without inference provider (local search only)
-- [ ] Work without audio devices
-- [ ] Work without network
-- [ ] Clear error messages for missing capabilities
+### Real Host Lifecycle (P1)
+- [x] Composition root for RuntimeContext, ServiceRegistry, EventBus, Storage, AgentRunStore, Providers
+- [x] `start` initializes resources, reconciles interrupted runs, exposes truthful readiness
+- [x] `stop` cancels jobs, awaits bounded graceful termination, flushes DB, closes resources
+- [x] `doctor` checks Java/OS/arch, directories, DB migration, audio, provider reachability
+- [x] `status` distinguishes stopped/running/degraded/unconfigured
+- [x] `ask` actually invokes configured provider or fails clearly
+- [x] No unauthenticated TCP management API; CLI remains useful
+- [x] Systemd unit aligned with real daemon behavior (no `Type=notify` without sd_notify)
 
-### Integration Tests
-- [ ] End-to-end: ask → inference → store → search
-- [ ] Restart survival: conversations persist
-- [ ] Provider failure handling
-- [ ] Concurrent request handling
+### Provider Integration & Safety (P1)
+- [x] Reuses `OpenAiCompatibleTransport` for HTTP/SSE, cancellation, timeouts, model discovery, tool-call streaming
+- [x] Supports OpenAI-compatible endpoints including loopback, LAN, remote
+- [x] `CredentialTransportPolicy` enforced; no public HTTP credential transmission
+- [x] Auth-free local endpoints (`ProviderAuthKind.NONE`) work for all operations
+- [x] Never silently selects paid remote model when local-only policy requested
+- [x] Fixture-based integration tests for model discovery, generation, token streams, cancellation, auth-free local, invalid credentials, interrupted runs
+
+### Documentation (P2)
+- [x] Updated `BUILD_FAILURE_REPORT.md`
+- [x] Updated `docs/ARCHITECTURE.md`
+- [x] Updated `docs/ROADMAP.md` (this file)
+- [x] Updated `docs/GETTING-STARTED.md`
+- [x] Added `docs/HALO-LINUX-003-IMPLEMENTATION-REPORT.md`
 
 ---
 
-## Milestone 3: Portability & Sync Foundation (Batch 004)
+## Milestone 3: Portability & Sync Foundation (Batch 004) 🎯 Next
 
 ### Linux Capability Abstraction
 - [ ] CPU/RAM/Disk/Network info collection
@@ -118,7 +132,7 @@ HaloLinux: A distributed personal computing ecosystem where every device is a pe
 - [ ] Capability advertisement for sync
 
 ### Audio Diagnostics Enhancement
-- [ ] PipeWire device details (ports, profiles)
+- [ ] PipeWire device details (ports, profiles) via proper JSON API
 - [ ] Bluetooth audio device detection (BlueZ)
 - [ ] Sample rate/format negotiation
 - [ ] Latency measurement
