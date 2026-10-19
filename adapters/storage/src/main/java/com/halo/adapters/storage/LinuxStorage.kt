@@ -21,7 +21,6 @@ import java.sql.ResultSet
 import java.sql.Statement
 import java.time.Instant
 import java.util.UUID
-import javax.sql.DataSource
 
 /**
  * Linux filesystem-based structured storage implementation.
@@ -39,7 +38,7 @@ class LinuxStorage : StructuredStorage {
     private lateinit var configDir: Path
     private lateinit var cacheDir: Path
     private lateinit var dbPath: Path
-    private lateinit var dataSource: DataSource
+    private lateinit var connection: Connection
     
     // Migration definitions - each migration is a list of complete SQL statements
     private val migrations = listOf(
@@ -208,24 +207,14 @@ class LinuxStorage : StructuredStorage {
     }
     
     private fun initializeDatabase() {
-        val url = "jdbc:sqlite:${dbPath.toAbsolutePath()}?journal_mode=WAL&foreign_keys=on&busy_timeout=5000"
-        dataSource = object : DataSource {
-            override fun getConnection(): Connection = DriverManager.getConnection(url)
-            override fun getConnection(username: String, password: String): Connection = getConnection()
-            override fun <T : Any> getConnection(username: String, password: String, classType: Class<T>): Connection = getConnection()
-            override fun <T : Any> getConnection(classType: Class<T>): Connection = getConnection()
-            override fun getLoginTimeout(): Int = 30
-            override fun setLoginTimeout(seconds: Int) {}
-            override fun getLogWriter() = java.sql.DriverManager.getLogWriter()
-            override fun setLogWriter(out: java.io.PrintWriter) { java.sql.DriverManager.setLogWriter(out) }
-        }
+        connection = DriverManager.getConnection("jdbc:sqlite:${dbPath.toAbsolutePath()}?journal_mode=WAL&foreign_keys=on&busy_timeout=5000")
         
         // Run migrations
         runMigrations()
     }
     
     private fun runMigrations() {
-        dataSource.getConnection().use { conn ->
+        connection.use { conn ->
             conn.setAutoCommit(false)
             try {
                 conn.createStatement().execute("""
@@ -283,12 +272,19 @@ class LinuxStorage : StructuredStorage {
     }
 
     override suspend fun storeConversation(conversation: ConversationRecord) = withContext(Dispatchers.IO) {
-        dataSource.getConnection().use { conn ->
+        connection.use { conn ->
             conn.setAutoCommit(false)
             try {
                 conn.prepareStatement("""
-                    INSERT OR REPLACE INTO conversations (id, title, created_at, updated_at, provider_id, model_id, metadata)
+                    INSERT INTO conversations (id, title, created_at, updated_at, provider_id, model_id, metadata)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        title = excluded.title,
+                        created_at = excluded.created_at,
+                        updated_at = excluded.updated_at,
+                        provider_id = excluded.provider_id,
+                        model_id = excluded.model_id,
+                        metadata = excluded.metadata
                 """.trimIndent()).use { stmt ->
                     stmt.setString(1, conversation.id)
                     stmt.setString(2, conversation.title)
@@ -302,8 +298,18 @@ class LinuxStorage : StructuredStorage {
                 
                 for (msg in conversation.messages) {
                     conn.prepareStatement("""
-                        INSERT OR REPLACE INTO messages (id, conversation_id, role, content, provider_id, model_id, tokens_used, latency_ms, created_at, metadata)
+                        INSERT INTO messages (id, conversation_id, role, content, provider_id, model_id, tokens_used, latency_ms, created_at, metadata)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(id) DO UPDATE SET
+                            conversation_id = excluded.conversation_id,
+                            role = excluded.role,
+                            content = excluded.content,
+                            provider_id = excluded.provider_id,
+                            model_id = excluded.model_id,
+                            tokens_used = excluded.tokens_used,
+                            latency_ms = excluded.latency_ms,
+                            created_at = excluded.created_at,
+                            metadata = excluded.metadata
                     """.trimIndent()).use { stmt ->
                         stmt.setString(1, msg.id)
                         stmt.setString(2, conversation.id)
@@ -330,7 +336,7 @@ class LinuxStorage : StructuredStorage {
     }
 
     override suspend fun loadConversation(id: String): ConversationRecord? = withContext(Dispatchers.IO) {
-        dataSource.getConnection().use { conn ->
+        connection.use { conn ->
             conn.prepareStatement("SELECT * FROM conversations WHERE id = ?")
                 .use { stmt ->
                     stmt.setString(1, id)
@@ -377,7 +383,7 @@ class LinuxStorage : StructuredStorage {
     }
 
     override suspend fun listConversations(limit: Int = 50, offset: Int = 0): List<ConversationSummary> = withContext(Dispatchers.IO) {
-        dataSource.getConnection().use { conn ->
+        connection.use { conn ->
             conn.prepareStatement("SELECT id, title, created_at, updated_at, provider_id, model_id FROM conversations ORDER BY updated_at DESC LIMIT ? OFFSET ?")
                 .use { stmt ->
                     stmt.setInt(1, limit)
@@ -401,7 +407,7 @@ class LinuxStorage : StructuredStorage {
     }
 
     override suspend fun searchMemories(query: String, limit: Int = 20): List<MemoryRecord> = withContext(Dispatchers.IO) {
-        dataSource.getConnection().use { conn ->
+        connection.use { conn ->
             // Sanitize FTS query to prevent injection
             val sanitizedQuery = query.replace("\"", "").replace("'", "").trim()
             if (sanitizedQuery.isBlank()) return@withContext emptyList()
@@ -437,10 +443,19 @@ class LinuxStorage : StructuredStorage {
     }
 
     override suspend fun storeMemory(memory: MemoryRecord) = withContext(Dispatchers.IO) {
-        dataSource.getConnection().use { conn ->
+        connection.use { conn ->
             conn.prepareStatement("""
-                INSERT OR REPLACE INTO memories (id, content, source, scope, confidence, expires_at, created_at, updated_at, metadata)
+                INSERT INTO memories (id, content, source, scope, confidence, expires_at, created_at, updated_at, metadata)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    content = excluded.content,
+                    source = excluded.source,
+                    scope = excluded.scope,
+                    confidence = excluded.confidence,
+                    expires_at = excluded.expires_at,
+                    created_at = excluded.created_at,
+                    updated_at = excluded.updated_at,
+                    metadata = excluded.metadata
             """.trimIndent()).use { stmt ->
                 stmt.setString(1, memory.id)
                 stmt.setString(2, memory.content)
@@ -457,7 +472,7 @@ class LinuxStorage : StructuredStorage {
     }
 
     override suspend fun getNodeIdentity(): NodeIdentity = withContext(Dispatchers.IO) {
-        dataSource.getConnection().use { conn ->
+        connection.use { conn ->
             val map = mutableMapOf<String, String>()
             conn.createStatement()
                 .executeQuery("SELECT key, value FROM node_identity")
@@ -497,7 +512,7 @@ class LinuxStorage : StructuredStorage {
     }
 
     override suspend fun setNodeIdentity(identity: NodeIdentity) = withContext(Dispatchers.IO) {
-        dataSource.getConnection().use { conn ->
+        connection.use { conn ->
             conn.setAutoCommit(false)
             try {
                 val entries = mapOf(
@@ -528,7 +543,7 @@ class LinuxStorage : StructuredStorage {
 
     override suspend fun close() = withContext(Dispatchers.IO) {
         log.info("Closing Linux structured storage")
-        // HikariCP would be used in production for connection pooling
+        connection.close()
     }
 }
 

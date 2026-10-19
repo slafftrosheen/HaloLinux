@@ -12,18 +12,14 @@ import com.halo.sdk.runtime.AgentInputResolution
 import com.halo.sdk.runtime.ActionTruth
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.callbackFlow
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
 import java.sql.Connection
 import java.sql.DriverManager
 import java.sql.PreparedStatement
 import java.sql.ResultSet
-import java.sql.Statement
 import java.time.Instant
 import java.util.UUID
-import javax.sql.DataSource
 
 /**
  * SQLite implementation of AgentRunStore.
@@ -37,25 +33,17 @@ import javax.sql.DataSource
 class SqliteAgentRunStore : AgentRunStore {
     private val log = LoggerFactory.getLogger(SqliteAgentRunStore::class.java)
     
-    private lateinit var dataSource: DataSource
-    private lateinit var dbPath: java.nio.file.Path
-
+    private var dbPath: java.nio.file.Path? = null
+    private lateinit var connection: Connection
+    
     suspend fun initialize(dbPath: java.nio.file.Path) = withContext(Dispatchers.IO) {
         this.dbPath = dbPath
-        val url = "jdbc:sqlite:${dbPath.toAbsolutePath()}?journal_mode=WAL&foreign_keys=on&busy_timeout=5000"
-        dataSource = object : DataSource {
-            override fun getConnection(): Connection = DriverManager.getConnection(url)
-            override fun getConnection(username: String, password: String): Connection = getConnection()
-            override fun <T : Any> getConnection(username: String, password: String, classType: Class<T>): Connection = getConnection()
-            override fun <T : Any> getConnection(classType: Class<T>): Connection = getConnection()
-            override fun getLoginTimeout(): Int = 30
-            override fun setLoginTimeout(seconds: Int) {}
-            override fun getLogWriter() = java.sql.DriverManager.getLogWriter()
-            override fun setLogWriter(out: java.io.PrintWriter) { java.sql.DriverManager.setLogWriter(out) }
-        }
+        java.nio.file.Files.createDirectories(dbPath.parent)
         
-        // Ensure tables exist (migrations handled by LinuxStorage)
-        dataSource.getConnection().use { conn ->
+        connection = DriverManager.getConnection("jdbc:sqlite:${dbPath.toAbsolutePath()}?journal_mode=WAL&foreign_keys=on&busy_timeout=5000")
+        
+        // Ensure tables exist (migrations handled by LinuxStorage migration 3)
+        connection.use { conn ->
             conn.setAutoCommit(false)
             try {
                 // agent_runs and agent_run_events tables created by LinuxStorage migration 3
@@ -69,26 +57,24 @@ class SqliteAgentRunStore : AgentRunStore {
         }
     }
 
-    override fun observeRuns(): Flow<List<AgentRun>> = callbackFlow {
-        // Simple polling-based flow for now
-        while (isActive) {
+    override fun observeRuns(): Flow<List<AgentRun>> = flow {
+        while (currentCoroutineContext().isActive) {
             try {
                 val runs = listRuns()
-                offer(runs)
+                emit(runs)
             } catch (e: Exception) {
                 log.warn("Failed to observe runs: ${e.message}")
             }
             try {
-                Thread.sleep(1000)
+                delay(1000)
             } catch (e: InterruptedException) {
-                close()
-                break
+                return@flow
             }
         }
     }
 
     private suspend fun listRuns(): List<AgentRun> = withContext(Dispatchers.IO) {
-        dataSource.getConnection().use { conn ->
+        connection.use { conn ->
             conn.createStatement()
                 .executeQuery("SELECT * FROM agent_runs ORDER BY updated_at DESC")
                 .use { rs ->
@@ -102,7 +88,7 @@ class SqliteAgentRunStore : AgentRunStore {
     }
 
     override suspend fun get(runId: AgentRunId): AgentRun? = withContext(Dispatchers.IO) {
-        dataSource.getConnection().use { conn ->
+        connection.use { conn ->
             conn.prepareStatement("SELECT * FROM agent_runs WHERE run_id = ?")
                 .use { stmt ->
                     stmt.setString(1, runId.value)
@@ -114,7 +100,7 @@ class SqliteAgentRunStore : AgentRunStore {
     }
 
     override suspend fun create(run: AgentRun) = withContext(Dispatchers.IO) {
-        dataSource.getConnection().use { conn ->
+        connection.use { conn ->
             conn.setAutoCommit(false)
             try {
                 conn.prepareStatement("""
@@ -145,7 +131,7 @@ class SqliteAgentRunStore : AgentRunStore {
     }
 
     override suspend fun appendStep(step: AgentStep): Boolean = withContext(Dispatchers.IO) {
-        dataSource.getConnection().use { conn ->
+        connection.use { conn ->
             conn.setAutoCommit(false)
             try {
                 // Check if step already exists (deduplication)
@@ -172,7 +158,7 @@ class SqliteAgentRunStore : AgentRunStore {
     }
 
     override suspend fun update(run: AgentRun) = withContext(Dispatchers.IO) {
-        dataSource.getConnection().use { conn ->
+        connection.use { conn ->
             conn.setAutoCommit(false)
             try {
                 val updated = conn.prepareStatement("""
@@ -207,7 +193,7 @@ class SqliteAgentRunStore : AgentRunStore {
     }
 
     override suspend fun children(parent: AgentRunId): List<AgentRun> = withContext(Dispatchers.IO) {
-        dataSource.getConnection().use { conn ->
+        connection.use { conn ->
             conn.prepareStatement("SELECT * FROM agent_runs WHERE origin_node_id = ? ORDER BY created_at")
                 .use { stmt ->
                     stmt.setString(1, parent.value)
@@ -223,7 +209,7 @@ class SqliteAgentRunStore : AgentRunStore {
     }
 
     override suspend fun createChildIfAllowed(parent: AgentRunId, child: AgentRun, maxChildren: Int): Boolean = withContext(Dispatchers.IO) {
-        dataSource.getConnection().use { conn ->
+        connection.use { conn ->
             conn.setAutoCommit(false)
             try {
                 // Check parent exists and is non-terminal
@@ -274,7 +260,7 @@ class SqliteAgentRunStore : AgentRunStore {
     }
 
     override suspend fun nonTerminalRuns(): List<AgentRun> = withContext(Dispatchers.IO) {
-        dataSource.getConnection().use { conn ->
+        connection.use { conn ->
             conn.prepareStatement("SELECT * FROM agent_runs WHERE status NOT IN ('COMPLETED', 'FAILED', 'CANCELLED', 'INTERRUPTED') ORDER BY updated_at")
                 .use { stmt ->
                     stmt.executeQuery().use { rs ->
@@ -289,7 +275,7 @@ class SqliteAgentRunStore : AgentRunStore {
     }
 
     override suspend fun claimResume(runId: AgentRunId, expectedState: AgentRunStatus): Boolean = withContext(Dispatchers.IO) {
-        dataSource.getConnection().use { conn ->
+        connection.use { conn ->
             conn.setAutoCommit(false)
             try {
                 val updated = conn.prepareStatement("""
@@ -339,7 +325,7 @@ class SqliteAgentRunStore : AgentRunStore {
         requestId: AgentInputRequestId,
         resolution: AgentInputResolution,
     ): Boolean = withContext(Dispatchers.IO) {
-        dataSource.getConnection().use { conn ->
+        connection.use { conn ->
             conn.setAutoCommit(false)
             try {
                 // Check if already resolved

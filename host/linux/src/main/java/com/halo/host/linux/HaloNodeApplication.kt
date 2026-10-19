@@ -14,6 +14,7 @@ import com.halo.sdk.provider.AiRequest
 import com.halo.sdk.provider.AiResponse
 import com.halo.sdk.provider.AiStreamEvent
 import com.halo.sdk.provider.AiExecutionLocation
+import com.halo.sdk.provider.AiWireProtocol
 import com.halo.sdk.provider.Credential
 import com.halo.sdk.provider.CredentialProvider
 import com.halo.sdk.provider.ModelDiscoveryMode
@@ -140,8 +141,9 @@ class HaloNodeApplication : Engine {
         structuredStorage = LinuxStorage()
         structuredStorage.initialize(storageConfig)
         
+        // Initialize preferences storage at a fixed path
         preferencesStorage = SqliteRuntimePreferences()
-        preferencesStorage.initialize(Storage.Config())
+        preferencesStorage.initialize(dataDir.resolve("preferences.db"))
         
         agentRunStore = SqliteAgentRunStore()
         agentRunStore.initialize(dataDir.resolve("agent_runs.db"))
@@ -182,13 +184,13 @@ class HaloNodeApplication : Engine {
                 displayName = preferencesStorage.getString("inference.provider.displayName", "OpenAI Compatible"),
                 baseUrl = baseUrl,
                 authKind = authKind,
-                protocol = com.halo.sdk.provider.ProviderProtocol.OPENAI_COMPATIBLE,
+                protocol = AiWireProtocol.OPENAI_CHAT_COMPLETIONS,
             )
             
             val transport = OpenAiCompatibleTransport(
                 client = OpenAiCompatibleTransport.defaultClient(),
                 baseUrl = baseUrl,
-                protocol = com.halo.sdk.provider.AiWireProtocol.OPENAI_CHAT_COMPLETIONS,
+                protocol = AiWireProtocol.OPENAI_CHAT_COMPLETIONS,
             )
             
             val credentialProvider = object : CredentialProvider {
@@ -220,10 +222,11 @@ class HaloNodeApplication : Engine {
         }
     }
     
-    private fun createAgentRun(interactionId: String): AgentRun {
+    private suspend fun createAgentRun(interactionId: String): AgentRun {
+        val nodeIdentity = structuredStorage.getNodeIdentity()
         return AgentRun.createNew(
             interactionId = interactionId,
-            originNodeId = structuredStorage.getNodeIdentity().nodeId,
+            originNodeId = nodeIdentity.nodeId,
         )
     }
     

@@ -19,13 +19,13 @@ class SqliteRuntimePreferences : Storage {
     private lateinit var dbPath: java.nio.file.Path
     private lateinit var connection: Connection
 
-    override suspend fun initialize(config: Storage.Config) = withContext(Dispatchers.IO) {
-        val home = java.nio.file.Paths.get(System.getProperty("user.home"))
-        val xdgDataHome = System.getenv("XDG_DATA_HOME")?.let { java.nio.file.Paths.get(it) }
-            ?: home.resolve(".local/share")
-        val dataDir = xdgDataHome.resolve("halo-linux")
-        java.nio.file.Files.createDirectories(dataDir)
-        dbPath = dataDir.resolve("preferences.db")
+    /**
+     * Initialize the preferences database at the given path.
+     * @param dbPath Path to the SQLite database file
+     */
+    suspend fun initialize(dbPath: java.nio.file.Path) = withContext(Dispatchers.IO) {
+        this.dbPath = dbPath
+        java.nio.file.Files.createDirectories(dbPath.parent)
         
         connection = DriverManager.getConnection("jdbc:sqlite:${dbPath.toAbsolutePath()}?foreign_keys=on")
         connection.createStatement().execute("""
