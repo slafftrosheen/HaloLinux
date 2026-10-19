@@ -1,15 +1,13 @@
 plugins {
     id("org.jetbrains.kotlin.jvm")
     id("org.jetbrains.kotlin.plugin.serialization")
-    id("com.github.jengelman.gradle.plugins.shadow")
 }
 
 dependencies {
     implementation(project(":sdk:runtime-sdk"))
     implementation(project(":sdk:provider-sdk"))
     implementation(project(":sdk:host-sdk"))
-    implementation(project(":runtime:kernel"))
-    implementation(project(":runtime:cognition"))
+    implementation(project(":runtime:core"))
     implementation(project(":runtime:events"))
     implementation(project(":runtime:lifecycle"))
     implementation(project(":runtime:provider-core"))
@@ -29,15 +27,3 @@ dependencies {
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
 }
 
-tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
-    kotlinOptions {
-        freeCompilerArgs.add("-Xjsr305=strict")
-    }
-}
-
-tasks.withType<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar> {
-    archiveClassifier.set("")
-    manifest {
-        attributes["Main-Class"] = "com.halo.host.linux.HaloNodeApplication"
-    }
-}

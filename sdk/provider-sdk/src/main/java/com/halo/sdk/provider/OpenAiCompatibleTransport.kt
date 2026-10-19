@@ -644,10 +644,17 @@ class OpenAiCompatibleTransport(
 
     private fun parseModelList(body: String, freeModelIds: Set<String>): List<AiModel> {
         val data = JSONObject(body).optJSONArray("data") ?: JSONArray()
+        val items = mutableListOf<JSONObject>()
+        for (i in 0 until data.length()) {
+            val item = data.getJSONObject(i)
+            if (item != null) {
+                items.add(item)
+            }
+        }
         return buildList {
-            for (i in 0 until data.length()) {
-                val item = data.getJSONObject(i) ?: continue
-                val id = item.optString("id").trim().ifEmpty { continue }
+            for (item in items) {
+                val id = item.optString("id").trim()
+                if (id.isEmpty()) continue
                 val name = item.optString("name", id)
                 val owned = item.optJSONObject("owner")?.optString("id")?.takeIf { it.isNotBlank() }?.toString()
                 val modelId = if (!owned.isNullOrBlank()) "$owned/$id" else id
