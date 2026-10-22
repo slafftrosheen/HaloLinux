@@ -14,7 +14,7 @@ import org.junit.jupiter.api.io.TempDir
 class LinuxKnowledgeQueriesTest {
     @TempDir lateinit var tempDir: Path
 
-    @Test fun readOnlyQueryBusRetrievesOnlyExplicitLocalNotes() = runBlocking {
+    @Test fun readOnlyQueryBusRetrievesOnlyExplicitLocalNotes() = runBlocking<Unit> {
         val storage = LinuxStorage()
         storage.initialize(LinuxStorageConfig(
             dataDir=tempDir.resolve("data").toString(),

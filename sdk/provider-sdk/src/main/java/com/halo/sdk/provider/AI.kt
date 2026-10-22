@@ -52,6 +52,8 @@ data class AiRequest(
     val interactionId: String? = null,
     val reasoningMode: AiReasoningMode = AiReasoningMode.DEFAULT,
     val reasoningTokenBudget: Int? = null,
+    /** Transient workload request; null preserves the existing canonical model preferences. */
+    val localExecutionProfile: WorkloadExecutionProfile? = null,
 )
 
 enum class ProviderTurnKind { INITIAL, TOOL_CONTINUATION }
@@ -316,11 +318,14 @@ data class AiModelCatalogEntry(
     val source: ModelCatalogueSource,
 )
 
+data class AiProviderFailure(val type: AiErrorType, val httpStatus: Int?, val retryAfterMs: Long?, val providerCode: String? = null)
+
 data class AiModelCatalogState(
     val models: List<AiModelCatalogEntry> = emptyList(),
     val refreshingProviders: Set<String> = emptySet(),
     val providerErrors: Map<String, String> = emptyMap(),
     val refreshedAtMs: Long? = null,
+    val providerFailures: Map<String, AiProviderFailure> = emptyMap(),
 )
 
 data class AiExecutionTargetSnapshot(

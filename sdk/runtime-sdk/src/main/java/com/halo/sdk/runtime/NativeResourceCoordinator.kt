@@ -221,7 +221,8 @@ class NativeResourceCoordinator(
         )
     }
 
-    suspend fun acquire(owner: NativeResourceOwner, operationId: String? = null, diagnostic: Boolean = false): Boolean {
+    suspend fun acquire(owner: NativeResourceOwner, operationId: String? = null, diagnostic: Boolean = false,
+        priorityOverride: ResourcePriority? = null): Boolean {
         budgetReevaluation?.invoke()
         val start = System.currentTimeMillis()
         if (!diagnostic && owner.nativeResourceKind == NativeResourceKind.HEAVY_ASR) {
@@ -254,8 +255,8 @@ class NativeResourceCoordinator(
                 requestId = "native:${owner.nativeResourceId}",
                 holder = ResourceHolder(id = owner.nativeResourceId, kind = ResourceHolderKind.PROVIDER),
                 claims = claims,
-                priority = if (diagnostic) ResourcePriority.MAINTENANCE else if (owner.nativeResourceKind == NativeResourceKind.HEAVY_ASR) ResourcePriority.INTERACTIVE_INPUT else ResourcePriority.INTERACTIVE,
-                waitPolicy = if (diagnostic) ResourceWaitPolicy.FailFast else ResourceWaitPolicy.Wait(1000L),
+                priority = priorityOverride ?: if (diagnostic) ResourcePriority.MAINTENANCE else if (owner.nativeResourceKind == NativeResourceKind.HEAVY_ASR) ResourcePriority.INTERACTIVE_INPUT else ResourcePriority.INTERACTIVE,
+                waitPolicy = if (diagnostic || priorityOverride==ResourcePriority.BACKGROUND) ResourceWaitPolicy.FailFast else ResourceWaitPolicy.Wait(1000L),
                 preemption = if (diagnostic) ResourcePreemptionPolicy.NEVER else ResourcePreemptionPolicy.COOPERATIVE,
             )
             when (val acq = resourceLeaseManager.acquire(req)) {

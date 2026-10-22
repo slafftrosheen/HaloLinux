@@ -26,7 +26,7 @@ class CanonicalTextTurnIntegrationTest {
         ))
     }
 
-    @Test fun successfulTextTurnUsesRealAgentCoordinatorAndDurableJournal() = runBlocking {
+    @Test fun successfulTextTurnUsesRealAgentCoordinatorAndDurableJournal() = runBlocking<Unit> {
         val db = storage()
         val runtime = LinuxRuntimeBridge(db)
         val provider = LinuxProviderLifecycle(FixtureInferenceProvider(), "fixture-model")
@@ -60,7 +60,7 @@ class CanonicalTextTurnIntegrationTest {
         }
     }
 
-    @Test fun unavailableProviderDoesNotFabricateSuccessfulRun() = runBlocking {
+    @Test fun unavailableProviderDoesNotFabricateSuccessfulRun() = runBlocking<Unit> {
         val db = storage()
         val runtime = LinuxRuntimeBridge(db)
         val provider = LinuxProviderLifecycle(null, null)

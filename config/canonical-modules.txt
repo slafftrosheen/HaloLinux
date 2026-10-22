@@ -1,0 +1,9 @@
+# Reviewed portable source modules; each uses src/main/java.
+# Changes to this list require a portability review, not automatic discovery.
+libraries/common
+libraries/halo-cognition-language
+sdk/host-sdk
+sdk/runtime-sdk
+sdk/provider-sdk
+runtime/events
+runtime/provider-core

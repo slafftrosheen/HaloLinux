@@ -36,9 +36,10 @@ data class LinuxTextTurnResult(
 )
 
 /**
- * Initial Halo cognition boundary for Linux: a text-only, side-effect-free turn.
+ * Linux text-turn boundary with no tool or device execution.
  * This uses canonical SDK request/context contracts and Halo's runtime event bus.
- * It is deliberately NOT the canonical durable AgentRunCoordinator yet.
+ * Standalone mode uses local checkpoints; optional recovery support also journals
+ * through the canonical AgentRunCoordinator without enabling automatic replay.
  */
 class LinuxCognitiveTurn(
     private val provider: LinuxProviderLifecycle,

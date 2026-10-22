@@ -20,7 +20,7 @@ import java.nio.file.Path
 class LinuxCognitiveTurnTest {
     @TempDir lateinit var folder: Path
 
-    @Test fun textTurnIsDurableAndContentIsNotNeededForStatus() = runBlocking {
+    @Test fun textTurnIsDurableAndContentIsNotNeededForStatus() = runBlocking<Unit> {
         val storage = LinuxStorage()
         storage.initialize(LinuxStorageConfig(
             dataDir=folder.resolve("data").toString(),
@@ -45,7 +45,7 @@ class LinuxCognitiveTurnTest {
         }
     }
 
-    @Test fun unconfiguredInferenceDoesNotPersistFabricatedConversation() = runBlocking {
+    @Test fun unconfiguredInferenceDoesNotPersistFabricatedConversation() = runBlocking<Unit> {
         val storage = LinuxStorage()
         storage.initialize(LinuxStorageConfig(
             dataDir=folder.resolve("data2").toString(),
@@ -67,7 +67,7 @@ class LinuxCognitiveTurnTest {
             storage.close()
         }
     }
-    @Test fun canonicalCognitiveEventsAreContentFree() = runBlocking {
+    @Test fun canonicalCognitiveEventsAreContentFree() = runBlocking<Unit> {
         val storage = LinuxStorage()
         storage.initialize(LinuxStorageConfig(
             dataDir=folder.resolve("events-data").toString(),
@@ -100,7 +100,7 @@ class LinuxCognitiveTurnTest {
         }
     }
 
-    @Test fun mainDbCompletionSurvivesSecondaryJournalFailureWithoutDuplicateRetry() = runBlocking {
+    @Test fun mainDbCompletionSurvivesSecondaryJournalFailureWithoutDuplicateRetry() = runBlocking<Unit> {
         val storage = LinuxStorage()
         storage.initialize(LinuxStorageConfig(
             dataDir=folder.resolve("consistent-data").toString(),
@@ -136,7 +136,7 @@ class LinuxCognitiveTurnTest {
         }
     }
 
-    @Test fun oversizedJsonAnswerCannotBecomeDeliveredConversation() = runBlocking {
+    @Test fun oversizedJsonAnswerCannotBecomeDeliveredConversation() = runBlocking<Unit> {
         val store = LinuxStorage()
         store.initialize(LinuxStorageConfig(
             dataDir=folder.resolve("limit-data").toString(),

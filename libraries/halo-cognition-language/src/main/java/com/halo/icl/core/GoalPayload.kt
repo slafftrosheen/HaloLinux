@@ -1,0 +1,1 @@
+// This file intentionally empty - GoalPayload is defined in Goal.kt

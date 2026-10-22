@@ -1,8 +1,34 @@
-# Halo Sync Protocol
+# Halo peer sync proposal — not implemented
 
 ## Overview
 
-HaloLinux implements a local-first, peer-to-peer synchronization protocol for the Halo ecosystem. There is **no central server**, **no mandatory cloud service**, and **no account requirement**.
+This document describes a proposed local-first peer protocol. HaloLinux does
+**not** currently implement pairing, discovery, encrypted peer transport, or
+cross-device synchronization. Its management endpoint is a private Unix socket.
+The JSON schemas in `protocol/schemas` are drafts, not an Android interoperability
+contract. There is no Halo-operated server or mandatory account in this design.
+
+The implemented Android **source** synchronization is documented in
+[Shared source strategy](SHARED-SOURCE-STRATEGY.md). It copies reviewed portable
+contracts from an exact commit and is separate from transferring personal data.
+
+## Android interoperability baseline (2026-10-23)
+
+Reviewed Android revision: `5a4047fec6dc9c561969c446641b22373d5157e2`.
+Android has a versioned `.halobrain` backup format, including section checksums,
+completion evidence, and optional authenticated encryption. A Linux SQLite node
+snapshot is **not** that format and cannot be imported into Android as one.
+
+The first data-transfer integration should reuse Android's archive contract and
+its preview/apply semantics through host adapters. It must preserve origin and
+revision information, unknown records, import scope, and user conflict choices.
+Credentials, OS permissions, and device-local content URIs must not be treated as
+portable capabilities. Live sync requires a separately reviewed transport and
+trust model; the following proposal is not authorization to expose a listener.
+
+Canonical Android sources: `app/src/main/java/com/halo/app/backup/`:
+`BrainArchiveModels.kt`, `BrainArchiveCrypto.kt`, `BrainSnapshot.kt`,
+`ZipBrainExporter.kt`, and `BrainImportRepository.kt`.
 
 ## Design Principles
 
@@ -40,7 +66,7 @@ HaloLinux implements a local-first, peer-to-peer synchronization protocol for th
 
 ## Node Identity
 
-Each node has a persistent cryptographic identity:
+Proposed peer identity (not the current Linux identity wire contract):
 
 ```json
 {
@@ -55,7 +81,9 @@ Each node has a persistent cryptographic identity:
 ```
 
 - **Ed25519 keypair** generated on first run
-- **Private key** stored encrypted (file permissions 0600)
+- **Private key** encryption and storage protection require a concrete design;
+  current Linux node keys are local SQLite data protected by filesystem permissions,
+  not encrypted at rest.
 - **Node ID** = SHA256(public_key) truncated to UUID format
 - **Display name** user-configurable
 
@@ -146,7 +174,10 @@ Each node has a persistent cryptographic identity:
 
 ## Conflict Resolution
 
-**Policy: Last Writer Wins (by revision)** with content hash verification:
+**Draft only:** revision comparisons below need an origin/version-vector design
+before implementation. Independent per-device revision counters cannot establish
+which concurrent edit is newer. Android archive import currently presents
+explicit conflict choices; it must not be silently replaced by this draft.
 
 1. Compare revision numbers
 2. Higher revision wins
@@ -216,12 +247,13 @@ TXT Records:
 |-----------|--------|
 | Node Identity | ✅ Implemented (LinuxStorage) |
 | Protocol Schemas | ✅ Defined (JSON Schema) |
-| Pairing | 🔄 Design complete, implementation pending |
+| Pairing | Proposed; security/protocol review and implementation pending |
 | mDNS Discovery | 🔄 Planned |
 | Encrypted Transport | 🔄 Planned (Noise/TLS) |
 | Sync Engine | 🔄 Planned |
-| Conflict Resolution | 🔄 Design complete |
-| Android Integration | 🔄 Requires Halo app changes |
+| Conflict Resolution | Proposed; concurrent revisions and tombstones unresolved |
+| Android portable source alignment | Implemented separately; SHA-pinned source snapshot |
+| Android personal data transfer | Not implemented; `.halobrain` is the existing Android contract |
 
 ## Future Capabilities
 

@@ -87,6 +87,11 @@ data class AiExecutionDiagnostics(
  * Interface for routing AI requests to the appropriate provider.
  */
 interface AiProviderRouter {
+    /** Independent feature opt-in, checked again at dispatch. Never replaces context/privacy gates. */
+    val paidMediaAllowed: Boolean get() = false
+
+    /** Monotonic configuration intent, including A -> B -> A edits; null if not reported. */
+    val configurationRevision: Long? get() = null
     val lastRoutingDecision: StateFlow<AiRoutingDecision?>
         get() = MutableStateFlow(null)
 
@@ -164,6 +169,7 @@ interface AiProviderRouter {
                 AiFailureDetails(recoverability = Recoverability.USER_ACTION_REQUIRED),
             )
         }
+        PaidMediaPolicy.requireAllowed(provider.isLocal, request, paidMediaAllowed, workload)
         val status = (provider as? ModelReadinessReporting)?.statusForModel(modelId) ?: provider.getStatus()
         status.cooldown?.takeIf { it.isActive() }?.let { cooldown ->
             throw AiProviderException(

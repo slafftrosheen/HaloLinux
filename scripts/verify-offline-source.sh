@@ -3,15 +3,20 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 echo "Checking shell syntax"
-for script in scripts/*.sh; do bash -n "$script"; done
+for script in scripts/*.sh scripts/lib/*.sh; do bash -n "$script"; done
 echo "Checking Python syntax without generating __pycache__"
 python3 -B - <<'PY'
 import ast
 from pathlib import Path
-for path in sorted(Path("scripts").glob("*.py")):
+for path in sorted(Path("scripts").rglob("*.py")):
     ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
 print("PASS: Python syntax")
 PY
+echo "Checking canonical Android source provenance"
+python3 -B scripts/sync-canonical-sources.py
+python3 -B scripts/check-canonical-sources.py
+echo "Checking Trixie platform and setup fixtures"
+python3 -B scripts/check-trixie-scripts.py
 echo "Checking project dependencies"
 python3 -B scripts/check-module-graph.py
 echo "Checking snapshot verifier fixtures"

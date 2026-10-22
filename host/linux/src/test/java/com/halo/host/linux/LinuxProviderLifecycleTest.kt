@@ -17,7 +17,7 @@ import org.junit.jupiter.api.Test
 class LinuxProviderLifecycleTest {
     private fun fixture(): AiInferenceProvider = FixtureInferenceProvider()
 
-    @Test fun disabledProviderNeverInventsAnAnswer() = runBlocking {
+    @Test fun disabledProviderNeverInventsAnAnswer() = runBlocking<Unit> {
         val lifecycle = LinuxProviderLifecycle(null, null)
         assertEquals(LinuxProviderPhase.DISABLED, lifecycle.snapshot().phase)
         assertFalse(lifecycle.checkConnectivity())
@@ -26,7 +26,7 @@ class LinuxProviderLifecycleTest {
         }
     }
 
-    @Test fun explicitlyPinnedModelAndState() = runBlocking {
+    @Test fun explicitlyPinnedModelAndState() = runBlocking<Unit> {
         val lifecycle = LinuxProviderLifecycle(fixture(), "fixture-model")
         assertEquals(LinuxProviderPhase.CONFIGURED, lifecycle.snapshot().phase)
         val response = lifecycle.generate("Hello", "interaction-1")
@@ -40,7 +40,7 @@ class LinuxProviderLifecycleTest {
         assertEquals(LinuxProviderPhase.STOPPED, lifecycle.snapshot().phase)
     }
 
-    @Test fun toolCallsAreRejectedAndNotExecuted() = runBlocking {
+    @Test fun toolCallsAreRejectedAndNotExecuted() = runBlocking<Unit> {
         val toolProducingProvider = object : AiInferenceProvider by fixture() {
             override suspend fun generate(request: AiRequest, context: AiContext): AiResponse =
                 AiResponse(
@@ -60,14 +60,14 @@ class LinuxProviderLifecycleTest {
         lifecycle.close()
     }
 
-    @Test fun explicitConnectivityProbe() = runBlocking {
+    @Test fun explicitConnectivityProbe() = runBlocking<Unit> {
         val lifecycle = LinuxProviderLifecycle(fixture(), "fixture-model")
         assertTrue(lifecycle.checkConnectivity())
         assertEquals(LinuxProviderPhase.AVAILABLE, lifecycle.snapshot().phase)
         assertEquals(0L, lifecycle.snapshot().attempts)
         lifecycle.close()
     }
-    @Test fun shutdownDuringInferenceNeverRestoresAvailableState() = runBlocking {
+    @Test fun shutdownDuringInferenceNeverRestoresAvailableState() = runBlocking<Unit> {
         val entered = CompletableDeferred<Unit>()
         val release = CompletableDeferred<Unit>()
         val blocking = object : AiInferenceProvider by fixture() {
@@ -93,7 +93,7 @@ class LinuxProviderLifecycleTest {
         lifecycle.close() // idempotent
     }
 
-    @Test fun secondRequestFailsBusyWithoutSendingSecondModelCall() = runBlocking {
+    @Test fun secondRequestFailsBusyWithoutSendingSecondModelCall() = runBlocking<Unit> {
         val entered = CompletableDeferred<Unit>()
         val release = CompletableDeferred<Unit>()
         val calls = java.util.concurrent.atomic.AtomicInteger()
@@ -128,7 +128,7 @@ class LinuxProviderLifecycleTest {
         }
     }
 
-    @Test fun healthCheckDoesNotDegradeAnActiveGeneration() = runBlocking {
+    @Test fun healthCheckDoesNotDegradeAnActiveGeneration() = runBlocking<Unit> {
         val entered = CompletableDeferred<Unit>()
         val release = CompletableDeferred<Unit>()
         val provider = object : AiInferenceProvider by fixture() {

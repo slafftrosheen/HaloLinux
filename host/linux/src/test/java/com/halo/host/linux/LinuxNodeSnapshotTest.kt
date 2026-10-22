@@ -33,7 +33,7 @@ class LinuxNodeSnapshotTest {
         ))
     }
 
-    @Test fun modelFreeSnapshotContainsVerifiedMainDbAndManifest() = runBlocking {
+    @Test fun modelFreeSnapshotContainsVerifiedMainDbAndManifest() = runBlocking<Unit> {
         val db = storage()
         try {
             val now = Instant.now()
@@ -70,7 +70,7 @@ class LinuxNodeSnapshotTest {
         } finally { db.close() }
     }
 
-    @Test fun agentBackupFailureNeverLeavesPartialSnapshotDirectory() = runBlocking {
+    @Test fun agentBackupFailureNeverLeavesPartialSnapshotDirectory() = runBlocking<Unit> {
         val db = storage()
         val failing = object : LinuxRecoverySupport {
             override suspend fun inspect() = JSONObject().put("state", "CLASSIFICATION_ONLY")
@@ -88,7 +88,7 @@ class LinuxNodeSnapshotTest {
         } finally { db.close() }
     }
 
-    @Test fun publicBackupParentIsRejected() = runBlocking {
+    @Test fun publicBackupParentIsRejected() = runBlocking<Unit> {
         val db = storage()
         try {
             val parent = Files.createDirectories(root.resolve("public"))

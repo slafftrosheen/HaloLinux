@@ -16,7 +16,7 @@ import org.junit.jupiter.api.io.TempDir
 class CanonicalHostRecoverySupportTest {
     @TempDir lateinit var temp: Path
 
-    @Test fun daemonReportsCanonicalRecoveryWithoutExecutingAnything() = runBlocking {
+    @Test fun daemonReportsCanonicalRecoveryWithoutExecutingAnything() = runBlocking<Unit> {
         CanonicalHostRecoverySupport(temp).use { adapter ->
             val now = Instant.parse("2026-10-12T00:00:00Z")
             SqliteAgentRunStore(temp.resolve("canonical-agent-runs.db")).use { store ->

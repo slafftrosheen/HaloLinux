@@ -9,10 +9,11 @@ import org.junit.jupiter.api.io.TempDir
 class LinuxRecoverySupportTest {
     @TempDir lateinit var tempDir: Path
 
-    @Test fun standaloneBuildDoesNotCreateOrReplayCanonicalAgentData() = runBlocking {
+    @Test fun linkedRecoveryModeNeverEnablesAutomaticReplayOrTools() = runBlocking<Unit> {
         // Default build has no canonical runtime/cognition dependency.
         val recovery = LinuxRecoverySupportFactory.open(tempDir)
         recovery.use {
+            it.prepare()
             val result = it.inspect()
             val canonicalLinked = runCatching {
                 Class.forName("com.halo.host.linux.CanonicalHostRecoverySupport")

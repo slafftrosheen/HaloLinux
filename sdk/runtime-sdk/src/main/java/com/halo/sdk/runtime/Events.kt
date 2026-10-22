@@ -105,6 +105,12 @@ data class TtsRequested(
     val interactionId: String? = null,
     val speechRate: Double = 1.0,
     val language: String? = null,
+    /** Explicit user-requested document reading, divided into bounded PCM segments by the output owner. */
+    val readAloudInSegments: Boolean = false,
+    /** Snapshot of the selected provider at a private read action. Never a preview bypass. */
+    val requiredProviderId: String? = null,
+    /** Private child/Study/workspace tool narration must stay on a local voice. */
+    val localOnly: Boolean = false,
 ) : HaloEvent
 
 data class TtsRangeStarted(val transactionId: String, val start: Int, val end: Int,
@@ -404,6 +410,14 @@ data class AiTargetResolvedEvent(
     val resolvedModel: String?,
     val isLocal: Boolean,
     val fallbackUsed: Boolean
+) : HaloEvent
+
+/** Exact remote attempt response; no message, model, endpoint or credential content. */
+data class RemoteProviderAnswerEvent(
+    override val id: String = UUID.randomUUID().toString(),
+    override val timestamp: Long = System.currentTimeMillis(),
+    val requestId: String,
+    val providerId: String,
 ) : HaloEvent
 
 data class RemoteProviderRequestEvent(

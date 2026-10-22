@@ -1,123 +1,139 @@
-# HALO-LINUX-008/010 — staged cognitive integration
+# Cognitive integration — HALO-LINUX-050
 
-Canonical source: https://github.com/slafftrosheen/Halo
-Canonical Halo revision used for source audit: `82cc3532dbb2a2edb15144fffd1b6a26154a0e25`.
+Canonical runtime owner: <https://github.com/slafftrosheen/Halo>.
+Reviewed revision: `5a4047fec6dc9c561969c446641b22373d5157e2`, recorded in
+`config/canonical-halo.sha`.
 
-## Implemented in Linux source
+HaloLinux supports two explicit compositions. Both accept text requests through
+the local Unix socket, use one configured provider/model, preserve local
+conversations and reject tool execution.
 
-The first Linux cognitive slice now runs:
+| Composition | Runtime ownership and persistence |
+| --- | --- |
+| Standalone/default | Canonical SDK sources, shared event bus and Linux text-turn orchestration; main SQLite conversations and content-free turn checkpoints |
+| Optional canonical cognition | The same host text path plus the real upstream `DefaultAgentRunCoordinator`, recovery planner and Linux `SqliteAgentRunStore` in a separate database |
 
-```
-Unix socket ask
-  -> Halo LinuxCognitiveTurn
-  -> content-free ACCEPTED / REASONING events on Halo EventBus
-  -> pinned LinuxProviderLifecycle
-  -> Halo SDK AiRequest (ToolUseMode.NONE) / AiContext.EMPTY
-  -> Halo SDK provider transport
-  -> response validation (reject tool calls, reject empty text)
-  -> SQLite transactional user+assistant conversation
-  -> content-free COMMITTED or FAILED event
-  -> response to invoking CLI
-```
+The standalone JVM build and host tests have executed on x86-64 Linux.
+Compilation of the pinned canonical cognition and Linux agent-store modules and
+their focused tests has also succeeded. Consult
+[implementation status](IMPLEMENTATION-STATUS.md) for the final complete
+canonical host/package gate and hardware evidence; a module-level result is not
+the complete deployment gate.
 
-The provider is constructed once per daemon and reports CONFIGURED, CHECKING,
-AVAILABLE, INFERENCING, DEGRADED or DISABLED. An explicit `provider check`
-tests connectivity. Status is content-free and does not launch model requests.
-A provider error is never silently retried on another model or sent to the cloud.
+## Text request flow
 
-Local memory commands remain typed operations; there is no hidden model
-authorization to execute shell/device tools or import personal notes.
+`LinuxCognitiveTurn` implements the bounded host turn. Its
+`LinuxRecoverySupport` hook is inactive in the standalone build and backed by
+`CanonicalHostRecoverySupport` in the optional build.
 
-## Not yet implemented
+| Stage | Behavior |
+| --- | --- |
+| Admission | Validate the bounded request and acquire the host mutation gate |
+| Local checkpoint | Persist ACCEPTED, then REASONING, with an interaction ID |
+| Optional canonical start | Create a real canonical run, record preparation and provider-turn evidence before inference |
+| Inference | Call the process-pinned provider with `ToolUseMode.NONE` and `AiContext.EMPTY` |
+| Validation | Reject tool calls, blank responses and responses exceeding the encoded local delivery budget |
+| Local commit | Insert the conversation and advance its checkpoint in one SQLite transaction |
+| Optional canonical completion | Record response commitment and complete the canonical run after the main database commit |
+| Return | Send the answer and metadata to the invoking local client |
 
-- Canonical `runtime/cognition` `AgentRunCoordinator` and durable recovery:
-  needs matching `libraries/halo-cognition-language`, persistent run store,
-  tool authorization and replay-safety contracts, not just an extra provider call.
-- Multi-turn conversation resume/context compaction.
-- Runtime tool execution, action confirmation, timers, OS command adapters.
-- Advanced reasoning pipeline, model delegation and sub-agent recovery.
-- Android ↔ Linux peer synchronization.
-- User-visible streaming and STT/TTS.
+The event bus carries `CognitiveRequestStarted`,
+`CognitiveReasoningStarted`, `InferenceObserved` and Linux turn-stage events
+without prompt/response content. This does not mean all persistence is
+content-free: conversations and the optional canonical run journal contain
+private user/model text.
 
-Do not label the current text slice as complete Ask → Reason → Act → Respond.
-It intentionally does **not** perform any actions. The next integration should
-pin a shared canonical agent-run contract and explicit storage adapters before
-tool execution is enabled.
+A committed response means the host durably recorded it. It does not prove that
+a disconnected CLI displayed the answer or that a user read it.
 
-All new code remains source-level pending real Gradle/Linux execution testing.
+## Provider lifecycle and bounded work
 
-## HALO-LINUX-011 — crash-safe text-turn checkpoints
+The provider is constructed once per daemon with an explicit endpoint/model.
+It reports DISABLED, CONFIGURED, CHECKING, AVAILABLE, INFERENCING, DEGRADED or
+STOPPED. `provider check` is an explicit connectivity probe; status snapshots
+do not launch model requests.
 
-SQLite migration v3 adds a content-free `turn_checkpoints` table. A turn
-transitions ACCEPTED → REASONING → COMMITTED or FAILED. Startup reconciles any
-nonterminal checkpoints into INTERRUPTED. **No request is rerun automatically.**
+Only one generation owns the provider permit. Admission waits are bounded
+separately from generation time, and a busy caller does not start a late queued
+model request or mark the active model degraded. The permit remains held through
+response validation and terminal status updates. Shutdown cancels/closes the
+underlying transport and retains terminal lifecycle state.
 
-The ledger stores identifiers, state, timestamps, an optional conversation ID
-and a sanitized failure category. It deliberately does not store prompts,
-responses, tokens or authorization data. This is a conservative preparation for
-the canonical AgentRunCoordinator, **not** a replacement for durable agent
-planning/recovery. HALO-LINUX-013 makes conversation and checkpoint completion a single SQLite
-transaction. If message insertion fails, neither a completed journal record nor
-a partial conversation is committed. The node still never automatically replays
-an interrupted turn.
+An unavailable, failed, timed-out or busy provider never triggers an automatic
+retry on another model or remote service. Requests receive `AiContext.EMPTY`;
+the host does not silently retrieve personal memory into a model prompt.
 
-## HALO-LINUX-013 — atomic completion
+## Main-database durability
 
-`commitTextTurn(interactionId, conversation)` conditionally advances the
-REASONING checkpoint to COMMITTED and inserts user/assistant messages in the
-**same SQLite transaction**. A duplicate commit attempt does not rewrite the
-original answer. Tests cover a real SQLite primary-key violation and rollback.
+The main SQLite `turn_checkpoints` table stores interaction IDs, stage,
+timestamps, an optional conversation ID and a sanitized failure category.
+It does not store request text, responses or authorization evidence.
 
-## HALO-LINUX-014 — canonical cognitive event compatibility
+`commitTextTurn(interactionId, conversation)` conditionally advances a
+REASONING checkpoint to COMMITTED and inserts the user/assistant conversation
+in the same transaction. A failed insert rolls both changes back; a duplicate
+commit does not replace the original answer.
 
-The Linux turn now emits the existing portable runtime-sdk events
-`CognitiveRequestStarted`, `CognitiveReasoningStarted`, and
-`InferenceObserved` along with the minimal Linux turn stages. These canonical
-events contain stable IDs, provider/model metadata and outcomes but no prompt
-or response payloads. A fixture regression test asserts both order and lack
-of private request text in emitted events. Linux continues to forbid tools and
-unauthorized replay.
+After the daemon acquires its single-instance lock, unfinished standalone
+checkpoints are classified as INTERRUPTED. This does not rerun inference.
+The lightweight checkpoint ledger remains distinct from the canonical
+agent journal.
 
-## HALO-LINUX-017 — read-only host query bus
+## Optional canonical journaling and startup recovery
 
-`LinuxRuntimeBridge` now resolves a real canonical `QueryBus`, with exactly
-two typed read-only queries: `SearchLocalMemory` and
-`CountInterruptedTextTurns`. Unknown query types fail explicitly. Provider
-requests still get `AiContext.EMPTY`; private memory is **not** silently
-inserted into prompts, sent over LAN, or exposed as a model tool.
+The optional host instantiates the actual canonical
+`DefaultAgentRunCoordinator(store, scope)`. Startup calls
+`prepareOutstandingRunsForRecovery()` once, after acquiring the daemon lock.
 
-This is a host capability bridge, not a substitute for canonical agent-run
-persistence or tool authorization.
+That operation classifies existing evidence and may normalize durable run states
+to SUSPENDED, waiting states or terminal states. It is not purely a read-only
+database operation. Subsequent `agent recovery` inspection is read-only and
+reports content-free counts and startup categories.
 
-## HALO-LINUX-021A — canonical text-run evidence, opt-in
+A fresh text request is registered through `coordinator.start()`. The journal
+contains `RunPrepared` and `ProviderTurnStarted` before inference,
+`ProviderTurnCompleted` and `ResponseProduced` after a valid response,
+and `ResponseCommitted` after main-database persistence. The coordinator then
+completes the run.
 
-The standalone Pi build continues to use the local SQLite text-turn checkpoint.
-With pinned canonical cognition enabled, the same text request is also
-registered through the REAL `DefaultAgentRunCoordinator.start()`. Its canonical
-journal records `RunPrepared`, `ProviderTurnStarted` before inference,
-`ProviderTurnCompleted` and `ResponseProduced` before delivering content,
-and `ResponseCommitted` only after the main SQLite conversation is durable.
-Then the canonical coordinator completes the run.
+The main and canonical stores are separate SQLite databases. There is no atomic
+transaction spanning both. If the main conversation commits but canonical
+finalization fails, the answer remains durable and is returned with
+`canonical_journal_state=NEEDS_RECONCILIATION`. The canonical run ID identifies
+the outstanding evidence. The node does not regenerate or redeliver the answer
+automatically.
 
-There is no multi-database atomic transaction; failure after the main DB
-commits may leave a canonical run with response evidence but no committed
-delivery record. This is surfaced at startup for classification; **never**
-automatically replay or redeliver the model answer. Tool use stays disabled.
+A recovery planner's recommendation is not permission to run it. Neither startup
+nor status invokes `claimResume`, `claimRecovery`, a provider retry or a tool
+executor. Manual resume is not exposed by this host either. Unknown journal
+versions/variants fail explicitly instead of dropping evidence.
 
-## HALO-LINUX-021B — delivery mismatch classification
+See [canonical agent store](CANONICAL-AGENT-STORE.md) for codec, claims and
+backup details, and [the portability gate](CANONICAL-AGENT-PORTABILITY.md)
+for the optional build.
 
-If a main SQLite conversation commits but canonical journal finalization
-fails, the response is still returned (so callers do not reflexively retry an
-already successful request), with `canonical_journal_state=NEEDS_RECONCILIATION`.
-The unfinished canonical record is visible to explicit startup recovery
-inspection. No automatic rerun occurs. Cancellation continues to propagate.
-The opt-in result also includes the canonical agent run ID.
+## Local query and action boundary
 
-## HALO-LINUX-024 — bounded inference admission
+`LinuxRuntimeBridge` implements two typed read-only queries:
+`SearchLocalMemory` and `CountInterruptedTextTurns`. Unknown query types and
+unsupported commands fail explicitly. Explicit CLI memory operations do not
+grant a model permission to read arbitrary notes or invoke OS/device actions.
 
-Each node permits one active model generation at a time. A second caller may
-wait up to five seconds to acquire the inference lease; otherwise the request
-fails with a sanitized busy/rate-limit error **before another model call starts**.
-Actual generation retains its separate bounded timeout. This prevents a backlog
-of stale local control requests while the Pi is under CPU or memory pressure.
-The adapter does not automatically retry a timed-out or busy inference.
+Canonical action and authorization types compile in the optional module, but
+that does not install a Linux executor. User-facing tool execution requires
+separately wired host capabilities, resource admission, authorization, action
+receipts and replay-safety evidence.
+
+## Remaining integration work
+
+- Full multi-turn `CognitiveSession` context assembly, resume and compaction.
+- Additional lossless canonical journal variants and cross-host migration fixtures.
+- A reviewed reconciliation workflow for main/canonical delivery mismatches.
+- Authorized host tool execution and explicit user-controlled recovery admission.
+- Linux capture/playback, streaming delivery, wake/VAD, STT and TTS.
+- Android `.halobrain` interchange and subsequently reviewed live peer sync.
+- Pi 5/ARM64, real-provider, power-loss and sustained-operation acceptance.
+
+Keep runtime planning and authorization canonical. The implemented source-sync
+gate prevents SDK drift; it does not implement Android personal-data transfer
+or qualify Android-specific host functionality on Linux.

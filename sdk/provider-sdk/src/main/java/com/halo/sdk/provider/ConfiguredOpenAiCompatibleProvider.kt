@@ -47,7 +47,8 @@ class ConfiguredOpenAiCompatibleProvider(
 
     private val _authInfo = MutableStateFlow(ProviderAuthInfo(
         authKind = descriptor.authKinds.firstOrNull() ?: ProviderAuthKind.NONE,
-        authState = if (credentialProvider.hasCredential()) ProviderAuthState.CONFIGURED else ProviderAuthState.NOT_CONFIGURED,
+        authState = runCatching { if (credentialProvider.hasCredential()) ProviderAuthState.CONFIGURED else ProviderAuthState.NOT_CONFIGURED }
+            .getOrDefault(ProviderAuthState.FAILED),
     ))
     val authInfo: StateFlow<ProviderAuthInfo> = _authInfo.asStateFlow()
 
@@ -77,7 +78,7 @@ class ConfiguredOpenAiCompatibleProvider(
             }
         } catch (e: AiProviderException) {
             setAuthState(if (e.type == AiErrorType.AUTHENTICATION_FAILED) ProviderAuthState.FAILED else ProviderAuthState.FAILED, e.message)
-            false
+            throw e
         }
     }
 
@@ -87,7 +88,7 @@ class ConfiguredOpenAiCompatibleProvider(
         val model = request.modelId?.takeIf { it.isNotBlank() }
             ?: throw AiProviderException(AiErrorType.MODEL_NOT_SELECTED, "Select a ${displayName} model first")
         return try {
-            transport.generate(request, context, model, header, value, systemPrompt, allowInsecureLocalCredentialTransport).also {
+            transport.generate(request, context, model, header, value, systemPrompt, allowInsecureLocalCredentialTransport).copy(providerId = id).also {
                 if (it.text.isNotBlank() || it.toolCalls.isNotEmpty()) setAuthState(ProviderAuthState.CONNECTED)
             }
         } catch (e: CancellationException) {
@@ -103,7 +104,9 @@ class ConfiguredOpenAiCompatibleProvider(
         val (header, value) = credentialHeader(cred)
         val model = request.modelId?.takeIf { it.isNotBlank() }
             ?: throw AiProviderException(AiErrorType.MODEL_NOT_SELECTED, "Select a ${displayName} model first")
-        transport.stream(request, context, model, header, value, systemPrompt, allowInsecureLocalCredentialTransport).collect { emit(it) }
+        transport.stream(request, context, model, header, value, systemPrompt, allowInsecureLocalCredentialTransport).collect { event ->
+            emit(if (event is AiStreamEvent.Completed) event.copy(response = event.response.copy(providerId = id)) else event)
+        }
     }
 
     override suspend fun listModels(): List<AiModel> = withContext(Dispatchers.IO) {

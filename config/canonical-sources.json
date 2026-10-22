@@ -1,0 +1,748 @@
+{
+  "schemaVersion": 1,
+  "repository": "https://github.com/slafftrosheen/Halo",
+  "revision": "5a4047fec6dc9c561969c446641b22373d5157e2",
+  "modules": [
+    "libraries/common",
+    "libraries/halo-cognition-language",
+    "sdk/host-sdk",
+    "sdk/runtime-sdk",
+    "sdk/provider-sdk",
+    "runtime/events",
+    "runtime/provider-core"
+  ],
+  "files": [
+    {
+      "path": "libraries/common/src/main/java/com/halo/libraries/common/core/Identifier.kt",
+      "sha256": "bd1ee0dd75bf5d106b2cb94211c86bffaa982dce5908b8500ec2018e2fe0b77e"
+    },
+    {
+      "path": "libraries/common/src/main/java/com/halo/libraries/common/core/Version.kt",
+      "sha256": "c064451c402d8ef4d30b1fc86997a3f02f6ef09871c0418f6b58c13f09023875"
+    },
+    {
+      "path": "libraries/halo-cognition-language/src/main/java/com/halo/cognition/language/AppCommandIntent.kt",
+      "sha256": "13136adec9e9fe76f04c2a533ba0f92877c1efd248636c3359fc880e05e35a71"
+    },
+    {
+      "path": "libraries/halo-cognition-language/src/main/java/com/halo/cognition/language/ConversationSemantics.kt",
+      "sha256": "d56e4b4ff147190d6490bbb65090889f1cf72a269253fe27af49c342b9a1f57b"
+    },
+    {
+      "path": "libraries/halo-cognition-language/src/main/java/com/halo/cognition/language/Entity.kt",
+      "sha256": "a93af7c8dac39e215cf131e49702d312c4a53c23e6c717a9b27484dfb1ee2766"
+    },
+    {
+      "path": "libraries/halo-cognition-language/src/main/java/com/halo/cognition/language/Intent.kt",
+      "sha256": "a295a24cdbaaf01a9eb9d898e08d1ecbc777eaf083ebad2544b1b5326b6907ca"
+    },
+    {
+      "path": "libraries/halo-cognition-language/src/main/java/com/halo/cognition/language/InteractionId.kt",
+      "sha256": "7f824c12514d606903b3e546697bfd3ca790be97f573c421e1d14506fcbb45cb"
+    },
+    {
+      "path": "libraries/halo-cognition-language/src/main/java/com/halo/cognition/language/InterpretationStrategy.kt",
+      "sha256": "438269099af2fbdc0308fcfa24d17413a2460a11380d989126a7cf6b875d30fb"
+    },
+    {
+      "path": "libraries/halo-cognition-language/src/main/java/com/halo/cognition/language/NativeDestination.kt",
+      "sha256": "2545f905d8bcb10935c366f71466429913d1aa488e612ae5aea8394c0f0440c9"
+    },
+    {
+      "path": "libraries/halo-cognition-language/src/main/java/com/halo/cognition/language/NativeGlobalIntent.kt",
+      "sha256": "680ca69c79a6cf6f62d2c2cdf07ad1045113a79d8237b904c4999df43545a412"
+    },
+    {
+      "path": "libraries/halo-cognition-language/src/main/java/com/halo/cognition/language/NativeGoogleMailIntent.kt",
+      "sha256": "2e651b641c7254d5ca8cc73e966cf8d508b154366ec92f4b50925e54fe1a24e6"
+    },
+    {
+      "path": "libraries/halo-cognition-language/src/main/java/com/halo/cognition/language/NativeIntent.kt",
+      "sha256": "2a683a1c1f14739aae14dce6468f8f2ddd28d2c7a7255324007e285c93ab61ae"
+    },
+    {
+      "path": "libraries/halo-cognition-language/src/main/java/com/halo/cognition/language/NativeObservationIntent.kt",
+      "sha256": "535ec5bd5a89a389aa190c4c363490efce7651c1dd4342ef3d7025f520955729"
+    },
+    {
+      "path": "libraries/halo-cognition-language/src/main/java/com/halo/cognition/language/NativeSettingsPhrases.kt",
+      "sha256": "0fa95c361faab69fa66210647776a13992e2f4a888a1f0fb73ef733256ad572a"
+    },
+    {
+      "path": "libraries/halo-cognition-language/src/main/java/com/halo/cognition/language/NativeTargetIntent.kt",
+      "sha256": "04a820cafda94c45442faebace968c80806401203660be25304ecfcc935f3832"
+    },
+    {
+      "path": "libraries/halo-cognition-language/src/main/java/com/halo/cognition/language/ReminderTemporalValidation.kt",
+      "sha256": "3c6bf4e6d4ee48628a58a09f4d268800be08e1d6189b87e6f10be1b6d3f920c6"
+    },
+    {
+      "path": "libraries/halo-cognition-language/src/main/java/com/halo/cognition/language/TemporalExpressionParser.kt",
+      "sha256": "c90e0eb70dc17099c674c2faf17176e63f3e4b6ff381316849f0e82850dcd4c8"
+    },
+    {
+      "path": "libraries/halo-cognition-language/src/main/java/com/halo/cognition/language/TemporalParseResult.kt",
+      "sha256": "f209b873f69ebf37794ec45a49391e650fe798e3a3e704dd09d0d96a4d3c9748"
+    },
+    {
+      "path": "libraries/halo-cognition-language/src/main/java/com/halo/icl/core/CognitiveEdge.kt",
+      "sha256": "3183bd97a87e63c797b663d1bb8ee58aacf7e49a881a21ee8247c98e39341c5b"
+    },
+    {
+      "path": "libraries/halo-cognition-language/src/main/java/com/halo/icl/core/CognitiveId.kt",
+      "sha256": "c8186595e36682aa400c121e401badf0a6e765e5914ad8c868199b9b7927caab"
+    },
+    {
+      "path": "libraries/halo-cognition-language/src/main/java/com/halo/icl/core/CognitiveObject.kt",
+      "sha256": "ff7825bc753a6665446b160814e2498290e791e8aef04ec310c2255ac31b2c5f"
+    },
+    {
+      "path": "libraries/halo-cognition-language/src/main/java/com/halo/icl/core/Confidence.kt",
+      "sha256": "688b2a976e92850f17982c1293858f89a38cabd0a57bfe582cab4ebf949e7c05"
+    },
+    {
+      "path": "libraries/halo-cognition-language/src/main/java/com/halo/icl/core/GoalPayload.kt",
+      "sha256": "f44a41eac2f61d3ce4dc239165e29cb25aa0ff11793e427a5b65f44431621fff"
+    },
+    {
+      "path": "libraries/halo-cognition-language/src/main/java/com/halo/icl/core/Provenance.kt",
+      "sha256": "b22668e19aa125c7eae589feaea72253fb8b99c622f1dc861c46a2c210680c57"
+    },
+    {
+      "path": "libraries/halo-cognition-language/src/main/java/com/halo/icl/ontology/Belief.kt",
+      "sha256": "3e1a15a71cbb1d924c4b0136ad2a58f5e9a253e9af0b2eef53d6a7fe3dc943fe"
+    },
+    {
+      "path": "libraries/halo-cognition-language/src/main/java/com/halo/icl/ontology/Conflict.kt",
+      "sha256": "434cc84da69d02e08de837ff04ef11944c11acc647f948e906be12970811d678"
+    },
+    {
+      "path": "libraries/halo-cognition-language/src/main/java/com/halo/icl/ontology/Explanation.kt",
+      "sha256": "0dc2ab9a782d06512db468837120651b49ff721a1cd6f7afc6623049d3fe66e1"
+    },
+    {
+      "path": "libraries/halo-cognition-language/src/main/java/com/halo/icl/ontology/Goal.kt",
+      "sha256": "2fa1664c092c633b1488cac8619d2918b9ebdcdaa501dae3fceedef318571209"
+    },
+    {
+      "path": "libraries/halo-cognition-language/src/main/java/com/halo/icl/ontology/Hypothesis.kt",
+      "sha256": "9477855a2397db230c9675f0d10892843f0a9074838e57a1e7b45991f4d71227"
+    },
+    {
+      "path": "libraries/halo-cognition-language/src/main/java/com/halo/icl/ontology/Intention.kt",
+      "sha256": "3bded5038fd21951776ec797278fbc6acabbf8c9820e3e9d2741141662f94475"
+    },
+    {
+      "path": "libraries/halo-cognition-language/src/main/java/com/halo/icl/ontology/Observation.kt",
+      "sha256": "a3a90c6fc294f297eb2fc2e7f86e8b50da57943a0a47a4eaeb70362ea2eaaa38"
+    },
+    {
+      "path": "libraries/halo-cognition-language/src/main/java/com/halo/icl/ontology/Outcome.kt",
+      "sha256": "2df9daf9b3b6e850e2996ed185a428b5d6147afa7fcc42178d537c12a3e61a9a"
+    },
+    {
+      "path": "libraries/halo-cognition-language/src/main/java/com/halo/icl/ontology/Payloads.kt",
+      "sha256": "351e36112875440fb8b021c4323f7967a72b45e7315fa9669c26962ede18da39"
+    },
+    {
+      "path": "libraries/halo-cognition-language/src/main/java/com/halo/icl/ontology/Plan.kt",
+      "sha256": "b355e5da5a3d92f3f86b0e0842cf8d9ef9f612c5fa5909fe65a45cb2c98022d9"
+    },
+    {
+      "path": "libraries/halo-cognition-language/src/main/java/com/halo/icl/ontology/Prediction.kt",
+      "sha256": "18dbdff2bca57ec358f79d7c822ef87adcabbdb6c9c95d0dd7538788c794d072"
+    },
+    {
+      "path": "libraries/halo-cognition-language/src/main/java/com/halo/icl/ontology/Task.kt",
+      "sha256": "ed6c002b0a3d1f35599e73b3ec2e38a8b18b6b60a875fe99ad5f78305e162d21"
+    },
+    {
+      "path": "libraries/halo-cognition-language/src/main/java/com/halo/icl/ontology/Thought.kt",
+      "sha256": "ee59459a75cc67a38634263ebd9461317bdd0464a4e2d5289394209dd613c754"
+    },
+    {
+      "path": "runtime/events/src/main/java/com/halo/runtime/events/DefaultEventBus.kt",
+      "sha256": "1c4e1c05a10f3fd03874018fe5dd325e0061ff8c76842da1444206cbdecb42e3"
+    },
+    {
+      "path": "runtime/provider-core/src/main/java/com/halo/runtime/provider/response/AiResponseValidator.kt",
+      "sha256": "3459664b48bfb845bbd5949dcb7ccc9623c48180449605465dbfb0c0fb41a7eb"
+    },
+    {
+      "path": "sdk/host-sdk/src/main/java/com/halo/sdk/host/AccessoryActions.kt",
+      "sha256": "a56769462d1937353370a12df9f983faeb1d0dc3b6762f4879049b1d835a6265"
+    },
+    {
+      "path": "sdk/host-sdk/src/main/java/com/halo/sdk/host/AccessoryControlEvent.kt",
+      "sha256": "f80aaa008f888930b8c1033acd69435daf427bd1cdd3bf9303832b174366b4ae"
+    },
+    {
+      "path": "sdk/host-sdk/src/main/java/com/halo/sdk/host/AccessoryGestureInterpreter.kt",
+      "sha256": "f184f494cfdffda42bed1cea9d58cc8eb45d29de355d7043b174e22b01dc8285"
+    },
+    {
+      "path": "sdk/host-sdk/src/main/java/com/halo/sdk/host/WavUtils.kt",
+      "sha256": "ae7266ad94f438482d8666797b4d8f36b787e583999044e8ca508a43d009e5a0"
+    },
+    {
+      "path": "sdk/host-sdk/src/main/java/com/halo/sdk/host/WearableHost.kt",
+      "sha256": "e8497a8477a1902cf2e3ed600be111325673c5a7bc0ed4cf6b6bf0609f447478"
+    },
+    {
+      "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/AI.kt",
+      "sha256": "9c171448d398a0255fd38c6738c127c16e42044562fafaf768240f93d35f69a7"
+    },
+    {
+      "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/AIEvents.kt",
+      "sha256": "2075f4f064b43af55f335e4551c57b92758a7334700221d81c2d5dcacd8c9093"
+    },
+    {
+      "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/AiContextPolicy.kt",
+      "sha256": "f8d74663ae316c7200a5e824951f22186b2c81c4400381b93ff8274b4d401c86"
+    },
+    {
+      "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/AiExecutionOutcome.kt",
+      "sha256": "ebf7480b167f8b7dba294acf97da23a43666f268ab06bc630a339178ea302d2f"
+    },
+    {
+      "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/AiHandoffProvider.kt",
+      "sha256": "2d44a65ed666daa41634f0f40b9492aa4b3a4f68c4e5e6d1bc8c90cd37690238"
+    },
+    {
+      "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/AiImageProvider.kt",
+      "sha256": "2846e29f4c4567942581e8425027141afbf0b54246f24f8d1e7bda0c938926e0"
+    },
+    {
+      "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/AiInferenceProvider.kt",
+      "sha256": "75132ef6edaed73c5a453fdcfe42aced0f3018c4c74438d4311141758c43d602"
+    },
+    {
+      "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/AiProviderException.kt",
+      "sha256": "817a53fb2463b205ce2882364f72f3b161b983b0fc618eee4cb8ff37ff263c79"
+    },
+    {
+      "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/AiProviderRegistry.kt",
+      "sha256": "e40390f617230b7c5471142494d233775aa931a0ad6719108a55bb2f646da754"
+    },
+    {
+      "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/AiProviderRouter.kt",
+      "sha256": "86bb0d7b50c49443a40342dfc96133e2a5a8b02bd637a048cfb80a3e54d9b31f"
+    },
+    {
+      "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/AiRoleCandidate.kt",
+      "sha256": "84a4b3aaf2a2f09cf5fe42cbcddf2594c9506d3fbb24cca6eb355bfd54d488e6"
+    },
+    {
+      "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/AiRoles.kt",
+      "sha256": "d224c6d36e94a608cdef64b1667e492397b3434159238e42ab96f39a9c28bf69"
+    },
+    {
+      "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/AiRoutingPolicy.kt",
+      "sha256": "067f2249a003adf8596d506677e43a72c10c86bd11afa20ed44b02b70b5feb58"
+    },
+    {
+      "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/AiWorkload.kt",
+      "sha256": "41f71f2146b66e122032a42808d2b086446e42c163ce138f0159264d1aaf49d2"
+    },
+    {
+      "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/AssistantTurn.kt",
+      "sha256": "27a4257dd98954bbcd9abba3048e7826ff751f64f57ba713c1abd17597fb5342"
+    },
+    {
+      "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/AudioContext.kt",
+      "sha256": "940b272891eae20d3d40e420fe23a55105ccdd45490d02520daaa783a0a67974"
+    },
+    {
+      "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/ConfiguredOpenAiCompatibleProvider.kt",
+      "sha256": "67451fc563cfa7cc10d42199a95615148421fbf42e2205b0b59b0e00eb50d2a7"
+    },
+    {
+      "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/Context.kt",
+      "sha256": "592652c295e8ef1f463a8cfa3084263281884f36730c2ec732082481ed6d65aa"
+    },
+    {
+      "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/ContextOverflow.kt",
+      "sha256": "fa70aecf39b9d5cc527e6890fd373bb86a44581b84bd21eef11f531ec0350228"
+    },
+    {
+      "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/CredentialStorageException.kt",
+      "sha256": "9ca463698dd57874a043aee10e6a5b219cf1f160a3e8170af9a9e8572880ba03"
+    },
+    {
+      "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/EmbeddingProvider.kt",
+      "sha256": "0c1c59ee51e12addd30e17577670e1c29ef2779497f9fb830de43d475489c347"
+    },
+    {
+      "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/ImageHttp.kt",
+      "sha256": "2dd487adbe4e24e31e71107101f7361d5adaf0cedd3a6c25a356a77a60d6d47c"
+    },
+    {
+      "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/InferenceProvider.kt",
+      "sha256": "69936aec96103bb54a11a1a97dd005ed7155afb37ef759acfad95d57e58c4f31"
+    },
+    {
+      "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/LocalInferenceExecutionReporting.kt",
+      "sha256": "2834a9099a7e0c3935b2ce2578b0e1abe536861a659de9dcf2f23aa03d42dddc"
+    },
+    {
+      "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/LocalInferenceRuntime.kt",
+      "sha256": "b96e3536f67e1f6c21a520da0adb3b34aed5d3190525a172e3ce7429b3f309e0"
+    },
+    {
+      "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/LocalRoleRecommendation.kt",
+      "sha256": "92562b5540311aad9125d8bceec55b265db7734bbffee39ffcc124b0e28ac73e"
+    },
+    {
+      "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/LocalWorkload.kt",
+      "sha256": "a18253bcde97ec5cd1d31435fd1bb2d492ef2a8c6547261c014bf6da7eb0567a"
+    },
+    {
+      "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/ModelCapabilityEvidence.kt",
+      "sha256": "45612d20b18d13b3741203ad53d43398fcebe24446d19a0be302e83af9e4e531"
+    },
+    {
+      "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/ModelInputCapabilityReporting.kt",
+      "sha256": "42a0d5fa9e84e33f824c8905999bb59cece675cc42e1d4413f89a282a5092b2f"
+    },
+    {
+      "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/ModelReadinessReporting.kt",
+      "sha256": "499a308df3a7649a2f14cdf0d156d16a20c92ab84aa9699d12534b30cfe42b33"
+    },
+    {
+      "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/OpenAiCompatibleTransport.kt",
+      "sha256": "68cec69629b69afe680d604be0e6bccf03d400a007d915a34df37772acbf35a7"
+    },
+    {
+      "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/PaidMediaPolicy.kt",
+      "sha256": "c7cf318ba04645868daeaccc9a04dcc3ef38ba5b03b4b7e30796fac3bef57904"
+    },
+    {
+      "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/PcmSpeechSynthesisProvider.kt",
+      "sha256": "7562d642b160b5ce1a540d0d46518ad2890ba1da90d1dc86ac65b8785dfb9fc8"
+    },
+    {
+      "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/ProviderConfigurationDescriptor.kt",
+      "sha256": "7ca139cf8bd1276a01e63a87fc96d755695957dde0d9a62e31e1348d2028630e"
+    },
+    {
+      "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/ProviderHttpDiagnostics.kt",
+      "sha256": "0a155ff62864c8b4f0e570a4678c8d55e6521c17b704e9334f5177e957747424"
+    },
+    {
+      "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/ProviderSecretStore.kt",
+      "sha256": "a75caa2cc14969d53f3741c1f80e7a7e488380611df85cea75a6d025bceafdc0"
+    },
+    {
+      "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/RemoteProviderPresence.kt",
+      "sha256": "59ff35b5cdaae5f1833fba9192ec75e4914186e4c5ce6485e5cedcdab844b7cc"
+    },
+    {
+      "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/ResponseLanguage.kt",
+      "sha256": "67885facf5a9354acc9f4c49d8e0abcdd1cd1bcfe6d6d262c4ee6078c58b225e"
+    },
+    {
+      "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/SpeechModelPack.kt",
+      "sha256": "fc814f5c0391f30c706b07582a6d0fc41b95ab1a4ba3782a36564e55d53dc856"
+    },
+    {
+      "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/SpeechProviderSelector.kt",
+      "sha256": "ace64974ef9ae57ca4738ba599fb73d616975753a76dc8c6eb0fc1451b9d644c"
+    },
+    {
+      "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/SpeechRecognitionProvider.kt",
+      "sha256": "deb3b84d70ea8f449be8f3a54e9092b800e21cc675492eff257c1bd0163de0c8"
+    },
+    {
+      "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/SpeechSynthesisProvider.kt",
+      "sha256": "db1ddbd737a804c67d97560d04da6361043784fae6de0ef2586f46ead8d4d8a1"
+    },
+    {
+      "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/StreamingToolCallAssembler.kt",
+      "sha256": "d5d7ef353bbeb5567e717be3b72c84a385f4cf32fc501be30fcabf60c2745dee"
+    },
+    {
+      "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/ToolCallProtocol.kt",
+      "sha256": "1078f983589a53a6abfc969747c25d9dacfacf5008e40e1f0f6c22143f726aae"
+    },
+    {
+      "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/UnavailableSpeechRecognitionProvider.kt",
+      "sha256": "ed2ec52fc4ff92436a4df7a70b05c6e6a5602992cf7fd1413f092145055bd94c"
+    },
+    {
+      "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/WakeWordDetector.kt",
+      "sha256": "26f721053686611f2964099d223de22f4140bf6a0da8c5b62a52a35e996290e1"
+    },
+    {
+      "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/WorkloadAdaptivePolicy.kt",
+      "sha256": "090a49b39d4ed19662bf8c09d5d2c9cd23cf15265657d158724094260124b91c"
+    },
+    {
+      "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/WorkloadPreparationPolicy.kt",
+      "sha256": "f5e8237128f8feee047d9113d563c6d3b367c230018208d88c5739cc829e81db"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/ActionPlan.kt",
+      "sha256": "c3483caae3b9d50718310429c862d798d412fbe713bcfa2d66c6542d234c031c"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/ActionReceipt.kt",
+      "sha256": "7902bc6e5db74c733d2643c2627bb8c1f00c7bdabb1c54d01e426d77ed7aa60b"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/CapabilityRouter.kt",
+      "sha256": "e6c4e17f73e9dcc348913b7bd2844437f998be7e1808ba91887d6af73b43a370"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/CommandBus.kt",
+      "sha256": "aa12652da43802912768f7e45dda945169cfd40dc86da051c2850d588edc89fe"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/ContextRequirement.kt",
+      "sha256": "70fcc74b34a2043b0a6d2d24ef231a70de0575b35c1a9e8177aeefa8866e6669"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/DeviceState.kt",
+      "sha256": "e7b8733bb1d6d0c55c6beb1be0c89e2ba5a8abf6cdd5a49e337a831e595f3b3e"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/Engine.kt",
+      "sha256": "c8ce531506a315a8b4e97274d344adee703bc49634dc7244ee6d90e805b1fb7d"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/EngineContext.kt",
+      "sha256": "e8a018cc482b676375762e35cddea6036ade746fcb4e696a746dd9be809f221a"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/EventBus.kt",
+      "sha256": "d22753920f373f39c21896e5109af9634cf3b9aaffcae05f33c33b1ec65bbe1e"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/EventEnvelope.kt",
+      "sha256": "53e17f56daa5db8516248a69cf7025248c2c480de20bc1d3ec3ae00340d15a6f"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/Events.kt",
+      "sha256": "dd305277631390b7eab0ea1c085c531701a2ba3bd5747a2cebbe3f2fac86f5c4"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/Fact.kt",
+      "sha256": "9718edb4e57e1091d210d22461fb776a3d1b17252c293b127a9cebdbeb2ed1f2"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/HaloDispatchers.kt",
+      "sha256": "20abf7ede254ccd3b72c0845d6b041d46f3fc05e08b49cff9e5fb1c7e61e8424"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/HaloIntent.kt",
+      "sha256": "429b54863c0a0063d55695ac91754de3e54381a350ad03a52b5b656fb51e9ac8"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/HostInvocation.kt",
+      "sha256": "4cbaf8255710dc08b261c9eb4b19b386c5b29b0fa71f42b55ff9756065fc86da"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/Identities.kt",
+      "sha256": "455e90f63be67ad79c8807bda6c9d6cd3c759ebba4739f369a6809d5ec99e608"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/InteractionAudioAffinity.kt",
+      "sha256": "7227e45db287dbe44c130e093a25b95f74d488f5a00f17190133b48e3f12a8a8"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/InteractionTurn.kt",
+      "sha256": "1a65015f0b8921907f4d9a499dd935a0df6b8ccf788c6d792ff06c0ee642ca39"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/Memory.kt",
+      "sha256": "3a4c852fe9cef42444ba93d4f754cca7c7bedefa6050c0d7c1c348598e7f4013"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/MetricsProvider.kt",
+      "sha256": "03665dec2023ff6af01bfd2bca952914a4cbe6094b6c73cd2bff0024e0684618"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/MobileNativeComputePolicy.kt",
+      "sha256": "3f19dfb8e781d9e3df7038c6dd60b5e39fe172c4fd76512a5de39f12fffb9728"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/NativeMemoryPressureRecovery.kt",
+      "sha256": "cbc8059cd6268bbc50c2ebbde4fa093ffa222854d79f2dcbbd7c55b26270bd58"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/NativeResourceCoordinator.kt",
+      "sha256": "4bac74cf01d2bd0aae27be19bc1c9b5d430a9600fcb38ee35310f3e4eda9cf7f"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/Observation.kt",
+      "sha256": "4a72dcca22ff748c401a26423ee2fc42f52107280c54cae8379534992ea6660b"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/PersonalReflectionCompleted.kt",
+      "sha256": "aef891be952032696f7b827b749fc4a9426ef61ad6aab2766c78508d88eca14b"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/Priority.kt",
+      "sha256": "a2715481bb489122136ee4facc2ec15d329cd47e092ed5b7e563646d750adc4b"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/ProvisionalSpeechIntent.kt",
+      "sha256": "707ae194c0fc34ec94f784e35004457263544ad4e17de9369b93a2d4aa90843c"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/QueryBus.kt",
+      "sha256": "cb037b0b555ed7732905260e59a354968d0267f11f226ee73f2bea2368c59c99"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/ReasoningResult.kt",
+      "sha256": "d2b9a6e1fb2fe2aec3031c1f86c0e2e613d0e933a9f68d6f818a1b93acdd196c"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/RecognitionQuality.kt",
+      "sha256": "dc3c133164655e9f9d1597b1793df3f5f8555157b9fd22630bac3c80f277108c"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/RecoverableEngine.kt",
+      "sha256": "ed89e2a643bdfb85c54dc0d1414da6f1e9f37feae84d87d54e02564bae3be7f0"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/ResponseDelivery.kt",
+      "sha256": "b2e06128b32e2aae00fd77f9e30bef4d140b78bd3df2f29c86d8c5c0c272be49"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/RuntimeClock.kt",
+      "sha256": "6f4a9e71dfa09fccfcc7f7a5f48640f9dd6a29506236da07c3b93c387554dc81"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/RuntimeContext.kt",
+      "sha256": "b4071d19cc9436c2fdbfdaa5010dc24261a197005983559f5fbf2c845c6b642b"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/RuntimeInspector.kt",
+      "sha256": "1515ffecc0bf8c658707d234f1bc9694a94f3dead51d3589c69d86fb4ed05968"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/RuntimeLogger.kt",
+      "sha256": "8e6f1490af5539394b814b1d641051340f62b148f46abb4da568dc6f41c45996"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/RuntimeMetrics.kt",
+      "sha256": "2f59dacdc35db7bf1ca5d0cf8e6079562ae67203987358fd6c739df41b522618"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/RuntimeMetricsSink.kt",
+      "sha256": "5788db41451e9cfda5fe29964f36c3316a949979711319b35d43539a7b9a2579"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/RuntimePower.kt",
+      "sha256": "1b54363fce2039ae791f3a1ab2a448baceb06e61e9559254bafdaced68c92204"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/RuntimeScheduler.kt",
+      "sha256": "dcf09410a7029966b6b75405eb6fed53c632310af4818fc23cd0e5726914be64"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/RuntimeSnapshot.kt",
+      "sha256": "108aac368e5483b8649391ffb941ff9a19bae8477d883088dae4e6443e53a43c"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/RuntimeSnapshotSource.kt",
+      "sha256": "84386986f82e351304876ec1ba8aea2fd15d3122effebfe9c520edf48ffbd294"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/RuntimeStage.kt",
+      "sha256": "a85468e700b768bbf63b28ec5f8069fa6aca10cac70fb531b5d398d6e657ddc3"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/RuntimeState.kt",
+      "sha256": "45b7dc639a77efa0d8d9a795ecc88e62991dda256cb0dcab3e7b892f0b5ed390"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/RuntimeUiMapper.kt",
+      "sha256": "520faba565b81d5bc16032e7648d5075649868143c4d66fd63b05d8ffd348674"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/ServiceKey.kt",
+      "sha256": "c315856a7480ceb6efb96df7381a0c95f1103c4d8fd005bae3dc803a7a025e3e"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/ServiceRegistry.kt",
+      "sha256": "a61df7be9bd8515e4c1e7892c324442ae1e570ee1b1319158175f7c62e0635b9"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/SpeechInputRoute.kt",
+      "sha256": "25129cc58d56729180f79f05728534bb04e71ae0dc80c0849e36acdf054f8716"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/SpeechOutputRoute.kt",
+      "sha256": "c6ba393c016b207a1be97fcc8a5d6f2ae581193126263ffba559ed7bb5b00c8a"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/SpeechRecognitionMetrics.kt",
+      "sha256": "2d96f769a54b4902236ba236750931801031fcf0695f43951cd600d173a11608"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/SpeechSessionState.kt",
+      "sha256": "a8cc3c38531921460b2f693acd7f1413b83f8faeb17790054371a7af585585f4"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/SpeechState.kt",
+      "sha256": "e3fd3cb4277307ebec20f171e83720d0ef268d2bc81b48c8b43301372e904748"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/SpeechStateObserver.kt",
+      "sha256": "f0182849759e44dfc836e2c3a134badaf5e4b06e3917ccdbfe033f340dcfffba"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/Storage.kt",
+      "sha256": "41d8748dec3bb1e79188f45a3fb03aa7f01ee53f30dc61141d2f1166edef78c2"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/Tickable.kt",
+      "sha256": "3be1134835c63e6badf2c3cf5b94fbe96b54920217273aa25f8625f83e7ce4cc"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/VoiceResponsePolicy.kt",
+      "sha256": "eb6d7c9036dd937013c6d14487eb9f1c049efcbf6dc4dadce4cea6ac27a85ff8"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/WorkloadExecutionPlan.kt",
+      "sha256": "e9bfeb3021a2e3da01ce5f93a4aafaec7111b1fbb85669ca65cb935e9175bfee"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/capability/OptionalRuntimeCapability.kt",
+      "sha256": "35610eb425d18436f433fa0364efd8a23ec0d8078f1918db51346fceac84b781"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/capability/RuntimeCapabilityRegistry.kt",
+      "sha256": "a3f2e3d9bc0269dee91b4aff1b53e022ec3391839c1e30ebcbee1088be55d25b"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/embodiment/BuddyBotGateway.kt",
+      "sha256": "ae11e36b5a787b566fa626c9bef0bd26d33250aab8f761b3af157906f8593b41"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/embodiment/BuddyBotSession.kt",
+      "sha256": "c0e35de64d1559a8a85cb7a0b1b9c46b01e6c7801fec46461f455c45cd1291ac"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/embodiment/DeviceDescriptor.kt",
+      "sha256": "b101c9258708a50aa2bde03bfd5f4e85b10e28d8664e3b1e6d671243613566bd"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/embodiment/DeviceRegistry.kt",
+      "sha256": "768498b0192b043fa12df8b60be8dc2e7105dd9a7e7132cee2e509ecc261313a"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/embodiment/DeviceSessionManager.kt",
+      "sha256": "861b7a18d0a72e143b557d18ed25d6760d2726c136bfa5ec9c21f339a380c705"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/embodiment/EmbodimentGateway.kt",
+      "sha256": "f4d0ef62d8cdef96e21d28bda87a0cbd12d5822161388b39a9347cca6bfb0892"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/embodiment/EmbodimentIdentity.kt",
+      "sha256": "9b97f423490cf7ec267ec329930f72c4906fcf2d1bd89322a5047a2a8b616041"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/embodiment/EmbodimentIntent.kt",
+      "sha256": "fb3e8a1717b2d5bc68792b9e30c6a0616901f75c7fc2fabd067a58756f8e196a"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/embodiment/EmbodimentSession.kt",
+      "sha256": "9282f9dd829a36e9ca69c8f7ea80f852b16fd1c8e301338969ec830dfa18b717"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/embodiment/EmbodimentTransport.kt",
+      "sha256": "4f53c5f1d5c9f2b03f4d2499be2f4a64a4222c308cc7f1ae3e03967371e0009d"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/embodiment/ExecutionResult.kt",
+      "sha256": "c132db4e7dbd1c4923ba0df790dc16ce3d95ec126a6feb1b788a0fe9b3a31c38"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/embodiment/ExecutionStatus.kt",
+      "sha256": "d5cbcc35ac126473da4b1c5fc467dc009a8b6ae65de6f703f0189233f10330ee"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/embodiment/HeyCyanGateway.kt",
+      "sha256": "ecbd69f2029992ab0bbddd9c13e4f9145deab6f946ab2ed41515e0d7be55a420"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/embodiment/HeyCyanSession.kt",
+      "sha256": "894670481d05605a2383f2722a9395c692b84e3e334f53b138ab0cafb582c3fd"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/embodiment/PersistentDeviceRegistry.kt",
+      "sha256": "0e72677040e7b193185ebac31a242af1642a3957a557dad45ebe2098485e3553"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/embodiment/SessionState.kt",
+      "sha256": "21a72b742599710c0f076836745771e67760aa89d571845a7eac610cc1afd9bc"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/embodiment/WebSocketEmbodimentTransport.kt",
+      "sha256": "8d246d2a5e277f4ff57e6f9dfb17ff5ceed515c84bf12f01868a9af336fcbf48"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/embodiment/heycyan/HeyCyanController.kt",
+      "sha256": "91ce4f5e263226e9470ca3831c147125f02d9d4d1dd8bcad47db1e416fca7b60"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/embodiment/heycyan/HeyCyanOperation.kt",
+      "sha256": "dd1898b47b5843cd7f867ba859fe665e508b3dbc8638936fd4080cce436195da"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/ink/InkCodec.kt",
+      "sha256": "6d04b60102e5866238e421c177da08ba95cf41aaa6242236c7fa009442721e6a"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/ink/InkDocument.kt",
+      "sha256": "de505c41a8ab709f0277c00edb878fb5b58ebe05c1b983e04e1fba376e7a9c16"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/ink/InkEditor.kt",
+      "sha256": "b3a72b57df9ee434ff09f6e8b9883c9cf7839797bdb78906e468507a36966608"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/ink/InkSelectionContext.kt",
+      "sha256": "31af53662bc135236fb81025590ee9e8d0a85c12846511fdf60e02c52f9b4f55"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/multimodal/AudioInputPreparer.kt",
+      "sha256": "4c2068df58ca8e00df422681baa8dff617804bb900f307c187e1df28aac24fdf"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/multimodal/MediaAsset.kt",
+      "sha256": "addbde65bb1a0c59a5eccf010cb5e9157db46bb62bd9403e9db713ef8a182787"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/multimodal/PcmAudio.kt",
+      "sha256": "f9c16349ed3eb4df0b9987cd6bb7e271666bdc44c637b9c637f21ebb0197e613"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/multimodal/VisualSourceResolver.kt",
+      "sha256": "979401853e9285d8fea0ce6c2de17b42ea2d3def22b627db61cd52cfe22587d2"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/resource/ResourceLeaseManager.kt",
+      "sha256": "8a29f331f53d76578f462f684425f591e042970f2580384b1416db0ce0090f0e"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/resource/ResourceTypes.kt",
+      "sha256": "427ec8517e04790465edffff16418f8872ce3d6864a4d68f95f852a17103308a"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/skills/SkillDescriptor.kt",
+      "sha256": "e79157299a3d282279ccece4f49cee6d8f17228e6237d6dae2d59abc9dd22c85"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/study/StudySession.kt",
+      "sha256": "d97a3da89cf32d76ae5d4ef606724c9b774585ce9e04b30eee2380565056564e"
+    },
+    {
+      "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/thermal/ThermalState.kt",
+      "sha256": "b49f5d054867823ad1d2deb93d6aed58dad4b5855cec8989390e4f231ce3a4dc"
+    }
+  ]
+}

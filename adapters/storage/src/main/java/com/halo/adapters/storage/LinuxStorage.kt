@@ -4,9 +4,17 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
 import java.io.File
+import java.io.IOException
+import java.nio.channels.Channels
 import java.nio.file.Files
+import java.nio.file.LinkOption
+import java.nio.file.NoSuchFileException
 import java.nio.file.Path
 import java.nio.file.Paths
+import java.nio.file.StandardOpenOption
+import java.nio.file.attribute.BasicFileAttributes
+import java.nio.file.attribute.FileTime
+import java.nio.file.attribute.PosixFilePermissions
 import java.sql.Connection
 import java.sql.DriverManager
 import java.sql.PreparedStatement
@@ -75,6 +83,11 @@ class LinuxStorage {
         val cacheChildren = listOf("inference", "audio")
             .map { checkedPrivatePath(cacheDir.resolve(it)) }
 
+        // The old master branch reused schema version 3 for a different agent
+        // journal. Validate existing data before chmod, directory creation,
+        // journal-mode changes, or migrations can modify the installation.
+        validateExistingSchema()
+
         // Never chmod a redirected existing file/directory.
         // Create directories
         Files.createDirectories(dataDir)
@@ -109,6 +122,191 @@ class LinuxStorage {
         ))
 
         log.info("Linux storage initialized at: ${dataDir}")
+    }
+
+    private fun validateExistingSchema() {
+        val recovery = "Stop Halo, back up the full data directory including any WAL/SHM files, " +
+            "then use a reviewed migration from a copy or select a new empty data directory. " +
+            "This build does not automatically convert an incompatible database."
+        val before = sourceDatabaseFiles(recovery)
+        if (before.getValue("") == null) {
+            require(before.values.all { it == null }) {
+                "Halo storage contains orphan database sidecars without halo.db. $recovery"
+            }
+            return
+        }
+        require(before.getValue("-journal") == null) {
+            "Halo storage has a rollback journal; recover it with the originating build before migration. $recovery"
+        }
+        // Even mode=ro may create WAL/SHM files on the original. Inspect private
+        // copies instead, retaining committed WAL frames but rebuilding SHM only
+        // inside the temporary directory. Memory is bounded; disk use is DB + WAL.
+        try {
+            val temporary = Files.createTempDirectory("halo-schema-",
+                PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwx------")))
+            var inspectionFailure: Throwable? = null
+            try {
+                for (suffix in listOf("", "-wal")) {
+                    val stamp = before.getValue(suffix) ?: continue
+                    copySchemaSource(dbPath.resolveSibling("${dbPath.fileName}$suffix"),
+                        temporary.resolve("halo.db$suffix"), stamp.size, recovery)
+                }
+                require(sourceDatabaseFiles(recovery) == before) {
+                    "Halo storage database changed during inspection. $recovery"
+                }
+                validateSchemaCopy(temporary.resolve("halo.db"), recovery)
+                require(sourceDatabaseFiles(recovery) == before) {
+                    "Halo storage database changed during inspection. $recovery"
+                }
+            } catch (failure: Throwable) {
+                inspectionFailure = failure
+                throw failure
+            } finally {
+                try {
+                    removeSchemaCopy(temporary)
+                } catch (cleanupFailure: IOException) {
+                    if (inspectionFailure != null) inspectionFailure.addSuppressed(cleanupFailure)
+                    else throw cleanupFailure
+                }
+            }
+        } catch (failure: IOException) {
+            throw IOException(
+                "Halo schema inspection could not create, read, or remove its private temporary copy. " +
+                    "Check file permissions and free temporary disk space for halo.db plus its WAL. " +
+                    "If necessary, restart with -Djava.io.tmpdir=/absolute/private/path on an adequately sized disk. " +
+                    "The source database was not written.", failure
+            )
+        }
+    }
+
+    private data class DatabaseFileStamp(val identity: Any?, val size: Long, val modified: FileTime)
+
+    private fun sourceDatabaseFiles(recovery: String): Map<String, DatabaseFileStamp?> =
+        listOf("", "-wal", "-shm", "-journal").associateWith { suffix ->
+            val path = dbPath.resolveSibling("${dbPath.fileName}$suffix")
+            val attributes = try {
+                Files.readAttributes(path, BasicFileAttributes::class.java, LinkOption.NOFOLLOW_LINKS)
+            } catch (_: NoSuchFileException) {
+                null
+            }
+            attributes?.let {
+                require(it.isRegularFile && !it.isSymbolicLink) {
+                    "Halo storage database and sidecars must be regular files, not symbolic links. $recovery"
+                }
+                DatabaseFileStamp(it.fileKey(), it.size(), it.lastModifiedTime())
+            }
+        }
+
+    private fun removeSchemaCopy(temporary: Path) {
+        // This newly created private directory contains only our copies and any
+        // SQLite sidecars. Attempt all removals, retaining every cleanup error.
+        var failure: IOException? = null
+        fun retain(error: IOException) {
+            if (failure == null) failure = error else failure!!.addSuppressed(error)
+        }
+        try {
+            Files.newDirectoryStream(temporary).use { entries ->
+                for (entry in entries) {
+                    try { Files.deleteIfExists(entry) } catch (error: IOException) { retain(error) }
+                }
+            }
+        } catch (error: IOException) {
+            retain(error)
+        }
+        try { Files.deleteIfExists(temporary) } catch (error: IOException) { retain(error) }
+        failure?.let { throw it }
+    }
+
+    private fun copySchemaSource(source: Path, copy: Path, size: Long, recovery: String) {
+        val ownerOnly = PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------"))
+        Channels.newInputStream(Files.newByteChannel(source,
+            setOf<java.nio.file.OpenOption>(StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS))).use { input ->
+            Channels.newOutputStream(Files.newByteChannel(copy,
+                setOf(StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE), ownerOnly)).use { output ->
+                val buffer = ByteArray(64 * 1024)
+                var remaining = size
+                while (remaining > 0) {
+                    val read = input.read(buffer, 0, minOf(buffer.size.toLong(), remaining).toInt())
+                    require(read >= 0) { "Halo storage database changed during inspection. $recovery" }
+                    output.write(buffer, 0, read)
+                    remaining -= read
+                }
+                require(input.read() == -1) { "Halo storage database changed during inspection. $recovery" }
+            }
+        }
+    }
+
+    private fun validateSchemaCopy(copy: Path, recovery: String) {
+        DriverManager.getConnection("jdbc:sqlite:${copy.toUri()}?mode=ro").use { conn ->
+            val tables = conn.createStatement().use { stmt ->
+                stmt.executeQuery("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").use { rows ->
+                    buildSet { while (rows.next()) add(rows.getString(1)) }
+                }
+            }
+            if (tables.isEmpty()) return
+            require("schema_version" in tables) {
+                "Halo storage database has an unversioned schema. $recovery"
+            }
+            fun requireColumns(table: String, columns: Set<String>) {
+                require(table in tables) {
+                    "Halo storage schema is incomplete or incompatible: missing $table. $recovery"
+                }
+                // Table names come only from the fixed contract below.
+                val present = conn.createStatement().use { stmt ->
+                    stmt.executeQuery("PRAGMA table_info('$table')").use { rows ->
+                        buildSet { while (rows.next()) add(rows.getString("name")) }
+                    }
+                }
+                require(present.containsAll(columns)) {
+                    "Halo storage schema is incomplete or incompatible: invalid $table columns. $recovery"
+                }
+            }
+            requireColumns("schema_version", setOf("version", "applied_at", "description"))
+            val versions = conn.createStatement().use { stmt ->
+                stmt.executeQuery("SELECT version FROM schema_version ORDER BY version").use { rows ->
+                    buildList { while (rows.next()) add(rows.getLong(1)) }
+                }
+            }
+            val current = versions.lastOrNull() ?: 0L
+            require(current <= 3L) {
+                "Halo storage schema $current is newer than supported 3; refusing downgrade. $recovery"
+            }
+            require(versions == (1L..current).toList()) {
+                "Halo storage migration history is incomplete or incompatible. $recovery"
+            }
+            require(current != 0L || tables == setOf("schema_version")) {
+                "Halo storage database has tables without migration history. $recovery"
+            }
+            require(current != 3L || "turn_checkpoints" in tables ||
+                tables.none { it == "agent_runs" || it == "agent_run_events" }) {
+                "Halo storage schema 3 belongs to the incompatible legacy master agent-journal lineage. $recovery"
+            }
+            if (current >= 1L) {
+                requireColumns("conversations", setOf(
+                    "id", "title", "created_at", "updated_at", "provider_id", "model_id", "metadata"
+                ))
+                requireColumns("messages", setOf(
+                    "id", "conversation_id", "role", "content", "provider_id", "model_id",
+                    "tokens_used", "latency_ms", "created_at", "metadata"
+                ))
+                requireColumns("memories", setOf(
+                    "id", "content", "source", "scope", "confidence", "expires_at",
+                    "created_at", "updated_at", "metadata"
+                ))
+                requireColumns("memories_fts", setOf("content", "source", "scope"))
+            }
+            if (current >= 2L) {
+                requireColumns("node_identity", setOf("key", "value", "updated_at"))
+                requireColumns("sync_peers", setOf(
+                    "id", "name", "public_key", "trust_state", "capabilities", "last_seen", "created_at", "metadata"
+                ))
+            }
+            if (current >= 3L) {
+                requireColumns("turn_checkpoints", setOf(
+                    "interaction_id", "state", "created_at", "updated_at", "conversation_id", "failure_type"
+                ))
+            }
+        }
     }
 
     private fun openConnection(): Connection =

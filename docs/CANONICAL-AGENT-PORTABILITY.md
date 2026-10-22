@@ -1,77 +1,126 @@
-# HALO-LINUX-015 — canonical AgentRunCoordinator portability gate
+# Canonical agent runtime portability
 
-This is an **optional integration compile target**, not a claim that Linux
-has the full agent runtime operational.
+The optional HaloLinux composition compiles the real Android Halo
+`runtime/cognition` production module directly from a separate reviewed checkout.
+It uses the same coordinator, journal/store contracts and recovery planner,
+rather than maintaining a Linux copy of that runtime.
 
-The canonical `runtime/cognition` module includes Halo's real
-`AgentRunCoordinator`, `AgentRunStore`, durable step journal, tool
-authorization types, and deterministic recovery planner. It has a substantial
-graph of 200+ Kotlin classes. Copying only its coordinator would create a
-second, subtly incompatible runtime.
+Current pin: `5a4047fec6dc9c561969c446641b22373d5157e2` in
+`config/canonical-halo.sha`. The ordinary standalone Pi build includes the
+reviewed portable SDK snapshot and does not require an external Halo checkout.
 
-## Implementation
+## Build and verification gate
 
-When both properties are supplied:
+Prepare a detached checkout at the pin as described in
+[Canonical SDK Build](CANONICAL-SDK-BUILD.md), then run:
+
+```bash
+./scripts/verify-canonical-cognition.sh ../HaloLinux-canonical
+```
+
+The gate verifies source provenance and the canonical agent contract, then runs
+the cognition, Linux agent-store and optional host test tasks and builds the
+executable JAR. The underlying Gradle selection is:
 
 ```bash
 ./gradlew -PhaloCanonicalRoot=/absolute/path/HaloLinux-canonical \
-  -PhaloCanonicalCognition=true :runtime:cognition:test
+  -PhaloCanonicalCognition=true \
+  :runtime:cognition:test :adapters:agent-store:test \
+  :host:linux:test :host:linux:shadowJar --no-daemon
 ```
 
-The conditional Gradle module compiles `runtime/cognition/src/main/java`
-**directly from the pinned canonical Halo checkout**, not from Linux copies.
-The pin is in `config/canonical-halo.sha`. Tests live in HaloLinux and
-exercise `AgentRunState.isTerminal` and the real
-`DefaultAgentRecoveryPlanner` with missing journal evidence.
+Both properties are required to enable canonical cognition. Linux build files
+and tests remain local; canonical production sources come from the exact
+reviewed checkout. Changing the pin or allowing dirty upstream source bytes
+would invalidate the provenance gate.
 
-Use `./scripts/verify-canonical-cognition.sh /absolute/path/HaloLinux-canonical`
-for the executable gate. The main Pi build stays independent of an external
-Halo checkout and does NOT include this module by default.
+HALO-LINUX-050 has compiled the real pinned cognition module and the Linux
+agent-store implementation on the JVM and executed their focused tests
+successfully. The complete optional host/package gate and current totals are
+recorded in [implementation status](IMPLEMENTATION-STATUS.md). Keep module
+compilation, focused test results, the complete gate and physical Pi acceptance
+as separate evidence.
 
-## What successful compilation would establish
+## Integrated components
 
-- Portable cognition and its language/SDK contracts can be compiled from a
-  reviewed, immutable Android Halo revision using a JVM-only Linux build.
-- The real recovery planner can classify unsupported, unjournaled work as
-  ineligible for automatic recovery.
+| Component | Current role |
+| --- | --- |
+| Canonical `runtime/cognition` | Owns agent contracts, `DefaultAgentRunCoordinator` and recovery planning |
+| Linux `SqliteAgentRunStore` | Implements durable canonical storage and atomic claims with a strict versioned codec |
+| `CanonicalHostRecoverySupport` | Composes coordinator/store, prepares startup classification and journals host text turns |
+| `CanonicalRecoveryInspector` | Reports planner categories without executing plans |
+| Main Linux storage | Owns the atomic conversation/text-checkpoint commit |
+| Linux snapshot set | Coordinates main/agent SQLite backups behind the daemon mutation gate |
 
-## HALO-LINUX-019 update
+A default build uses `DisabledRecoverySupport`, reports `NOT_LINKED` and does
+not initialize the separate canonical agent database. The optional build reports
+`CLASSIFICATION_ONLY` for recovery policy; this label does not mean the
+coordinator is absent. It is used for new text-run journaling as well.
 
-The opt-in [canonical agent store](CANONICAL-AGENT-STORE.md) now implements
-the *real* `AgentRunStore` contract with a restricted, strict v1 SQLite journal
-codec, atomic claims and read-only recovery classification. This is implemented
-in source, not yet build-verified. It is not a complete tool-aware run store
-or a running canonical coordinator.
+## Startup and text-run behavior
 
-## What it would NOT establish
+After the daemon takes its single-instance lock, the optional composition opens
+the canonical store and calls
+`DefaultAgentRunCoordinator.prepareOutstandingRunsForRecovery()` once.
+The canonical operation classifies nonterminal runs and may change their durable
+states. It never dispatches a provider retry or tool action during startup.
 
-- A complete, fully verified, tool-aware SQLite implementation of `AgentRunStore`.
-- Serialization for every canonical journal variant or authorized tool replay.
-- Reliable tool authorization or external action reconciliation.
-- A wired `CognitiveSession`, multi-turn context, or autonomous tool executor.
-- A passing default standalone/ARM64 build or Pi 5 hardware acceptance.
+Fresh text requests call the real coordinator's `start()`, record the provider
+turn and response evidence, and complete only after the main conversation is
+durable. A mismatch between the two database commits is exposed as
+`NEEDS_RECONCILIATION`; the node does not automatically repeat inference.
+See [Cognitive Integration](COGNITIVE-INTEGRATION.md).
 
-**Strict rule:** Do not change or delete copied SDKs merely because the
-optional module compiles. First secure both Android and Linux build compatibility,
-then publish pinned shared JVM artifacts and remove the duplicate source trees.
+Recovery inspection remains metadata-only:
 
-## Recommended next work
+```bash
+halo-node agent recovery
+```
 
-1. Run the optional pinned compile and collect missing dependency/API errors.
-2. Make a typed SQLite AgentRunStore implementation against the genuine canonical
-   interface; include versioned step encoding and unknown-schema rejection.
-3. Demonstrate atomic `create`, `appendStep`, `claimResume`,
-   `claimRecovery`, and `resolveInputIfPending` against restart.
-4. Wire canonical `DefaultAgentRunCoordinator` without enabling any tool
-   dispatch. Show `prepareOutstandingRunsForRecovery` classifying unfinished runs.
-5. Only enable actions after resource leasing, user authorization and replay
-   safety gates are tested against real host capabilities.
+The output includes startup classification categories and remaining nonterminal
+plan counts, without prompts or provider payloads. A plan recommending a retry
+does not grant execution authority. Automatic and manual resume are unavailable
+on this Linux host.
 
-## HALO-LINUX-046B — pinned contract preflight
+## Contract and persistence checks
 
-`python3 scripts/check-canonical-contract.py /path/to/pinned/Halo` checks
-SHA identity, AgentRunStore method presence, canonical coordinator recovery
-entry point, and symmetric encode/decode support for canonical AgentStep
-variants. Unsupported canonical variants are reported explicitly. The
-verification script now runs this before Gradle. This is a **static guard**,
-not a replacement for Kotlin/JVM compilation or semantic round-trip tests.
+`scripts/check-canonical-contract.py` validates the pinned source identity,
+required store methods, coordinator recovery entry point and symmetric
+encode/decode coverage for supported `AgentStep` variants. It names unsupported
+variants instead of treating them as safely discardable.
+
+The Linux store already implements create/read/update, append deduplication,
+child admission, resume/recovery claims and first-writer input resolution.
+Its tests exercise persistence, conflict/claim behavior and conservative recovery
+against the real canonical types. These are implemented features, not future
+replacement interfaces.
+
+The structural source check cannot prove Kotlin compatibility or lossless
+serialization by itself. JVM compilation and semantic storage tests remain
+required. Unsupported schemas, variants and host metadata continue to fail
+explicitly. See [Canonical Agent Store](CANONICAL-AGENT-STORE.md).
+
+## What the gate establishes and what remains
+
+A passing complete gate demonstrates that the selected canonical JVM sources,
+Linux storage adapter and optional host integration compile together and pass
+their current automated tests. It does not establish:
+
+- Serialization of every canonical journal variant or compatibility with an
+  arbitrary Android database.
+- A complete multi-turn `CognitiveSession`, context reconstruction or compaction.
+- User-facing tool dispatch, authorization, action reconciliation or replay.
+- A cross-database atomic commit or a complete restore/migration workflow.
+- Real-model inference, Linux speech, ARM64 JNI or Pi hardware stability.
+- Android personal-data synchronization or secure peer transport.
+
+Next work is to close those specific gaps with canonical contracts and measured
+host behavior. Add complex receipts and authority envelopes only with lossless
+fixtures. Enable actions only after host capability, resource, approval and
+replay-safety gates exist. Do not introduce a second Linux planner to bypass
+unsupported canonical evidence.
+
+Source snapshots remain a temporary distribution mechanism. Successful optional
+compilation does not by itself justify deleting them: demonstrate Android and
+standalone Linux compatibility before replacing them with pinned shared JVM
+artifacts.

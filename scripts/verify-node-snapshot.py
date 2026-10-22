@@ -41,6 +41,57 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def check_main_schema(conn: sqlite3.Connection) -> None:
+    """Validate the main v3 lineage; master used the same number for other tables."""
+    tables = {
+        row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+    }
+
+    def require_columns(table: str, expected: set[str]) -> None:
+        if table not in tables:
+            fail(f"Main database schema table is missing: {table}")
+        # Names are fixed schema identifiers below, never values from the archive.
+        columns = {row[1] for row in conn.execute(f"PRAGMA table_info('{table}')")}
+        if not expected <= columns:
+            fail(f"Main database schema columns are incompatible: {table}")
+
+    require_columns("schema_version", {"version", "applied_at", "description"})
+    versions = [row[0] for row in conn.execute("SELECT version FROM schema_version ORDER BY version")]
+    if versions != [1, 2, 3]:
+        fail("Unsupported main database schema or incomplete migration history; expected versions 1, 2, 3")
+    if "turn_checkpoints" not in tables and tables & {"agent_runs", "agent_run_events"}:
+        fail("Incompatible legacy master schema 3; preserve this backup for a reviewed migration")
+    required = {
+        "conversations": {"id", "title", "created_at", "updated_at", "provider_id", "model_id", "metadata"},
+        "messages": {"id", "conversation_id", "role", "content", "provider_id", "model_id",
+                     "tokens_used", "latency_ms", "created_at", "metadata"},
+        "memories": {"id", "content", "source", "scope", "confidence", "expires_at",
+                     "created_at", "updated_at", "metadata"},
+        "memories_fts": {"content", "source", "scope"},
+        "node_identity": {"key", "value", "updated_at"},
+        "sync_peers": {"id", "name", "public_key", "trust_state", "capabilities", "last_seen",
+                       "created_at", "metadata"},
+        "turn_checkpoints": {"interaction_id", "state", "created_at", "updated_at",
+                             "conversation_id", "failure_type"},
+    }
+    for table, columns in required.items():
+        require_columns(table, columns)
+
+
+def check_standalone_sqlite(path: Path) -> None:
+    """A snapshot component must not depend on a WAL or rollback journal."""
+    with path.open("rb") as handle:
+        header = handle.read(100)
+    if len(header) != 100 or header[:16] != b"SQLite format 3\x00":
+        fail(f"Invalid SQLite snapshot header: {path.name}")
+    # SQLite documents offsets 18/19 as read/write format: 1=rollback, 2=WAL.
+    # https://www.sqlite.org/fileformat2.html#file_format_version_numbers
+    # Halo creates snapshots with VACUUM INTO, whose output is standalone even
+    # when the source is in WAL mode. A copied live/WAL database is not this format.
+    if header[18:20] != b"\x01\x01":
+        fail(f"Snapshot database is not a standalone VACUUM image: {path.name}; preserve it and create a complete node backup")
+
+
 def verify(folder: Path) -> int:
     folder = folder.absolute()
     check_private(folder, directory=True)
@@ -59,6 +110,9 @@ def verify(folder: Path) -> int:
         expected.add("halo-agent.sqlite")
     elif document.get("includes_canonical_agent_store") is not False:
         fail("Invalid agent-store inclusion state")
+    # Reject journals/sidecars before SQLite can inspect or recover any database.
+    if {entry.name for entry in folder.iterdir()} != expected | {"manifest.json"}:
+        fail("Unexpected or missing files in the snapshot directory")
     actual = set()
     for entry in entries:
         filename = entry.get("filename", "")
@@ -78,13 +132,17 @@ def verify(folder: Path) -> int:
             fail(f"Unexpected size: {filename}")
         if sha256(path) != expected_hash:
             fail(f"Checksum mismatch: {filename}")
-        # Open SQLite in read-only mode; this is a VACUUM snapshot (no WAL needed).
-        uri = "file:" + quote(str(path), safe="/") + "?mode=ro"
+        check_standalone_sqlite(path)
+        # These validated standalone snapshots contain all committed state and
+        # have no sidecars. Immutable mode prevents SQLite from creating any.
+        # Never use this approach for a live Halo database or one with a WAL.
+        uri = "file:" + quote(str(path), safe="/") + "?mode=ro&immutable=1"
         with closing(sqlite3.connect(uri, uri=True)) as conn:
             result = conn.execute("PRAGMA quick_check").fetchone()
             if result is None or result[0] != "ok":
                 fail(f"SQLite integrity failed: {filename}")
             if filename == "halo-main.sqlite":
+                check_main_schema(conn)
                 node = conn.execute(
                     "SELECT value FROM node_identity WHERE key='node_id'"
                 ).fetchone()

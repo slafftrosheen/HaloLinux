@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Test
 
 class LinuxRuntimeBridgeTest {
     @TempDir lateinit var tempDir: Path
-    @Test fun createsAndStopsPortableRuntime() = runBlocking {
+    @Test fun createsAndStopsPortableRuntime() = runBlocking<Unit> {
         val storage = LinuxStorage()
         storage.initialize(LinuxStorageConfig(
             dataDir=tempDir.resolve("data").toString(),

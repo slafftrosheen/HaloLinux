@@ -11,14 +11,8 @@ cd "$PROJECT_ROOT"
 echo "=== HaloLinux Build ==="
 echo "Project root: $PROJECT_ROOT"
 
-# Check Java version
-if command -v java >/dev/null 2>&1; then
-    JAVA_VERSION=$(java -version 2>&1 | head -1 | cut -d'"' -f2)
-    echo "Java version: $JAVA_VERSION"
-else
-    echo "ERROR: Java not found. Please install Java 21+"
-    exit 1
-fi
+source "$SCRIPT_DIR/lib/host-platform.sh"
+halo_check_java build
 
 # Run Gradle build
 echo "Running Gradle build..."

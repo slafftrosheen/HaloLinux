@@ -29,7 +29,7 @@ class SqliteAgentRunStoreTest {
         recoveryPolicy = RunRecoveryPolicy.USER_RESUME,
     )
 
-    @Test fun journalRoundTripsAcrossRestartAndEmitsObservedState() = runBlocking {
+    @Test fun journalRoundTripsAcrossRestartAndEmitsObservedState() = runBlocking<Unit> {
         db().use { storage ->
             storage.create(run("first"))
             assertTrue(storage.appendStep(step("first", "0")))
@@ -49,7 +49,7 @@ class SqliteAgentRunStoreTest {
         }
     }
 
-    @Test fun resumeAndRecoveryClaimsAreCASAndPersistent() = runBlocking {
+    @Test fun resumeAndRecoveryClaimsAreCASAndPersistent() = runBlocking<Unit> {
         db().use { storage ->
             storage.create(run("resume"))
             assertTrue(storage.claimResume(AgentRunId("resume"), AgentRunState.SUSPENDED))
@@ -70,7 +70,7 @@ class SqliteAgentRunStoreTest {
         }
     }
 
-    @Test fun onlyOneInputResolutionCanWinAndSurvivesRestart() = runBlocking {
+    @Test fun onlyOneInputResolutionCanWinAndSurvivesRestart() = runBlocking<Unit> {
         db().use { storage ->
             storage.create(run("approval", AgentRunState.WAITING_FOR_APPROVAL))
             val inputId = AgentInputRequestId("approval-request")
@@ -98,7 +98,7 @@ class SqliteAgentRunStoreTest {
         }
     }
 
-    @Test fun childCountAndAncestryAreCheckedAtomically() = runBlocking {
+    @Test fun childCountAndAncestryAreCheckedAtomically() = runBlocking<Unit> {
         db().use { store ->
             store.create(run("parent", AgentRunState.EXECUTING))
             fun child(name: String) = run(name, AgentRunState.CREATED).copy(
@@ -115,7 +115,7 @@ class SqliteAgentRunStoreTest {
         }
     }
 
-    @Test fun claimedExecutionIsNotAutomaticallyConfirmedOrRepeated() = runBlocking {
+    @Test fun claimedExecutionIsNotAutomaticallyConfirmedOrRepeated() = runBlocking<Unit> {
         db().use { store ->
             store.create(run("safe"))
             val claim = AgentStep.ToolExecutionClaimed(
@@ -136,7 +136,7 @@ class SqliteAgentRunStoreTest {
         }
     }
 
-    @Test fun uncertainOutcomeSurvivesRestartAndCannotBecomeConfirmed() = runBlocking {
+    @Test fun uncertainOutcomeSurvivesRestartAndCannotBecomeConfirmed() = runBlocking<Unit> {
         val id = AgentRunId("uncertain")
         val prepared = AgentStep.ToolInvocationPrepared(
             AgentStepId("prepared"), id, start,
@@ -165,7 +165,7 @@ class SqliteAgentRunStoreTest {
         }
     }
 
-    @Test fun canonicalRecoveryPlannerIsInspectionOnly() = runBlocking {
+    @Test fun canonicalRecoveryPlannerIsInspectionOnly() = runBlocking<Unit> {
         db().use { store ->
             store.create(run("unfinished"))
             store.appendStep(step("unfinished", "prepared"))
@@ -199,7 +199,7 @@ class SqliteAgentRunStoreTest {
             CanonicalAgentJson.decodeStep(unknownStep)
         }
     }
-    @Test fun agentDbSnapshotIsConsistentAndNeverOverwritten() = runBlocking {
+    @Test fun agentDbSnapshotIsConsistentAndNeverOverwritten() = runBlocking<Unit> {
         val privateDir = folder.resolve("snapshots")
         java.nio.file.Files.createDirectories(privateDir)
         java.nio.file.Files.setPosixFilePermissions(privateDir, setOf(
@@ -229,7 +229,7 @@ class SqliteAgentRunStoreTest {
         }
     }
 
-    @Test fun resolutionRequiresCorrectPendingStateAndInputLength() = runBlocking {
+    @Test fun resolutionRequiresCorrectPendingStateAndInputLength() = runBlocking<Unit> {
         db().use { storage ->
             val id = AgentRunId("clarify")
             val reqId = AgentInputRequestId("clarify-1")
@@ -255,7 +255,7 @@ class SqliteAgentRunStoreTest {
         }
     }
 
-    @Test fun providerToolCallsRoundTripWithoutGrantingExecution() = runBlocking {
+    @Test fun providerToolCallsRoundTripWithoutGrantingExecution() = runBlocking<Unit> {
         db().use { storage ->
             storage.create(run("provider-response"))
             val step = AgentStep.ProviderTurnCompleted(
@@ -274,7 +274,7 @@ class SqliteAgentRunStoreTest {
         }
     }
 
-    @Test fun runGuardAndExternalConditionRoundTripWithoutSchedulingJobs() = runBlocking {
+    @Test fun runGuardAndExternalConditionRoundTripWithoutSchedulingJobs() = runBlocking<Unit> {
         db().use { store ->
             val runId = AgentRunId("guarded")
             store.create(run("guarded", AgentRunState.SUSPENDED))
@@ -301,7 +301,7 @@ class SqliteAgentRunStoreTest {
         }
     }
 
-    @Test fun providerAndToolOutcomeRetainOriginalActionTruth() = runBlocking {
+    @Test fun providerAndToolOutcomeRetainOriginalActionTruth() = runBlocking<Unit> {
         val runId = AgentRunId("outcome")
         db().use { store ->
             store.create(run("outcome"))
@@ -316,7 +316,7 @@ class SqliteAgentRunStoreTest {
         }
     }
 
-    @Test fun duplicateResponseCommitIdentityCannotBeJournaledTwice() = runBlocking {
+    @Test fun duplicateResponseCommitIdentityCannotBeJournaledTwice() = runBlocking<Unit> {
         db().use { store ->
             store.create(run("committed"))
             val runId = AgentRunId("committed")

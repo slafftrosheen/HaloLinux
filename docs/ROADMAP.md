@@ -1,239 +1,126 @@
-# HaloLinux Roadmap
+# HaloLinux roadmap
 
-## Vision
+## Direction
 
-HaloLinux: A distributed personal computing ecosystem where every device is a peer - Raspberry Pi nodes, Android wearables, Windows/Mac desktops, robots - all synchronizing securely without central authority.
+HaloLinux is the Linux host for the canonical Halo runtime: local-first personal
+storage and intelligence, explicit optional providers, and future user-controlled
+interoperability with Android. Raspberry Pi 5 with Raspberry Pi OS Trixie 64-bit
+is the reference embedded target. No Halo-operated service or mandatory account
+is needed for the local node.
 
----
+This roadmap records the current HALO-LINUX-050 boundary and ordered next work.
+Detailed test evidence belongs in [implementation status](IMPLEMENTATION-STATUS.md);
+historical batches remain in the changelog.
 
-## Milestone 0: Bootstrap (Current - Batch 001) ✅
+## Current baseline — HALO-LINUX-050
 
-- [x] Repository creation and Gradle project structure
-- [x] Portability audit of upstream Halo modules
-- [x] Core SDK modules copied (runtime-sdk, provider-sdk, libraries/common)
-- [x] Linux host application skeleton (`host:linux`)
-- [x] OpenAI-compatible inference adapter (`adapters:inference`)
-- [x] Fixture provider for testing
-- [x] Audio diagnostics (`adapters:audio`)
-- [x] SQLite + FTS5 storage (`adapters:storage`)
-- [x] Protocol schemas (Node Identity, Memory, Conversation, Sync Manifest)
-- [x] systemd service unit
-- [x] Build/test/install/doctor scripts
-- [x] Documentation (Architecture, Portability Audit, Getting Started, Pi 5, Inference, Audio, Sync, Security)
+| Area | Current state |
+| --- | --- |
+| Standalone build | JVM build, executable JAR packaging, 83 tests and daemon smoke passed on x86-64 Linux |
+| Android source alignment | 183 verbatim production files, seven reviewed modules, pinned to `5a4047fec6dc9c561969c446641b22373d5157e2` |
+| Repeatable updates | Source allowlist, SHA-256 manifest, offline verification and explicit reviewed update command |
+| Local node | Kotlin CLI, private Unix socket, single-instance protection and bounded mutation admission |
+| Storage | SQLite/FTS5 notes, conversations, conservative text-turn checkpoints and consistent snapshots |
+| Existing data | Schema lineage guard rejects incompatible legacy `master` stores before initialization; no automatic conversion |
+| Inference | Explicit process-scoped OpenAI-compatible provider, health checks and no automatic remote fallback |
+| Canonical cognition | Real pinned coordinator/recovery contracts and Linux agent store; complete 70-test JVM gate and packaged daemon smoke passed; device acceptance pending |
+| Trixie operations | JDK/userspace checks, Desktop/Lite setup and explicit user-service lifecycle; script fixtures executed |
+| Audio | ALSA/PipeWire diagnostics only |
+| Android personal-data sync | Not implemented; source alignment does not transfer user data |
 
-**Target:** Working CLI, build passes, basic daemon structure
+The source snapshot repairs missing cognition-language and provider-validator
+sources and includes current workload, provider, speech and embedding contracts.
+Importing those contracts does not establish Linux execution support for every
+workload or Android host capability.
 
----
+## 1. Accept the Pi 5/Trixie host
 
-## Milestone 1: Working Host (Batch 002) 🎯 Next
+The next deployment gate is executed evidence from the actual ARM64 device:
 
-### Core Runtime
-- [ ] Complete `HaloNodeApplication` Engine implementation
-- [ ] RuntimeContext with real EventBus/CommandBus/QueryBus
-- [ ] ServiceRegistry with dependency injection
-- [ ] Lifecycle: initialize → start → pause/resume → stop → dispose
-- [ ] Signal handling (SIGINT, SIGTERM, SIGHUP)
-- [ ] Structured logging (JSON to stdout/journald)
+- Build with the pinned wrapper and JDK 21 on 64-bit Trixie userspace.
+- Run the standalone tests and model-free daemon smoke path; verify native SQLite
+  loads and databases/snapshots reopen correctly.
+- Verify start, stop, restart, logout and reboot under the intended user service.
+- Confirm NVMe mount/data paths, permissions, identity preservation and free space.
+- Exercise provider loss, bounded concurrency, shutdown and memory pressure.
+- Record thermals, resident memory and sustained behavior with the chosen model.
 
-### Configuration
-- [ ] YAML config loading (SnakeYAML/Kotlinx Serialization)
-- [ ] Config validation with clear errors
-- [ ] Environment variable overrides
-- [ ] `halo-node config show` with secret masking
+Collect observed results before claiming performance, uptime or ARM64 parity.
+Source inspection and shell fixtures do not replace hardware acceptance.
+See [pre-deployment gates](PRE-DEPLOYMENT-GATES.md).
 
-### Management API
-- [ ] Unix domain socket server (abstract namespace `@halo-node-mgmt`)
-- [ ] Authentication (token-based, generated on startup)
-- [ ] JSON-RPC 2.0 or simple request/response protocol
-- [ ] Endpoints: status, health, inference, config, shutdown
-- [ ] CLI client for daemon communication
+## 2. Keep Android and Linux contracts aligned
 
-### Health Reporting (Multi-Dimensional)
-- [ ] Process health (JVM metrics, GC, memory)
-- [ ] Runtime health (engine state, event bus)
-- [ ] Provider health (configured, connected, model ready)
-- [ ] Audio health (devices enumerated, default set)
-- [ ] Storage health (DB accessible, migrations current)
-- [ ] Sync health (peers connected, last sync)
-- [ ] Overall: Healthy/Degraded/Failed (not single boolean)
+Use the explicit [canonical source workflow](SHARED-SOURCE-STRATEGY.md) for each
+reviewed Android revision:
 
-### Daemon Operation
-- [ ] Foreground mode for systemd (`Type=notify`)
-- [ ] PID file management
-- [ ] Graceful shutdown on SIGTERM (30s timeout)
-- [ ] Resource cleanup on exit
+- Review production source additions, removals and API changes.
+- Update the source snapshot, revision pin and hash manifest together.
+- Run standalone and canonical-source builds; run the optional cognition gate for
+  variants that use it.
+- Keep Linux adapters outside canonical source ownership.
+- Move to revision-pinned published JVM artifacts after both hosts demonstrate
+  compatibility.
 
-### Testing
-- [ ] Unit tests for config, lifecycle, health
-- [ ] Integration test: start → health → stop
-- [ ] Fixture provider tests
-- [ ] Storage migration tests
+Keep the optional canonical coordinator experimental until its complete gate and
+host acceptance pass. Extend the existing Halo execution/authorization contracts
+when adding actions; do not introduce a separate Linux planner or replay engine.
 
----
+## 3. Establish portable Android data interchange
 
-## Milestone 2: First Useful Runtime (Batch 003)
+The first data bridge should implement Android's existing versioned
+`.halobrain` archive contract through Linux host adapters.
 
-### Real Inference
-- [ ] `LinuxOpenAiCompatibleProvider` integration with host
-- [ ] Provider selection and routing
-- [ ] Streaming response handling
-- [ ] Tool call support (when provider supports it)
-- [ ] Model listing and selection
-- [ ] Connection pooling and timeouts
-- [ ] Retry with backoff for transient failures
+- Read-only inspection and validation before any import.
+- Exact manifest/completion/checksum and authenticated-encryption compatibility.
+- Resource limits, unsafe-path rejection and transactional application.
+- Preserved origins, identifiers, revisions and explicit conflict choices.
+- Clear handling of unsupported records, missing attachments and host-local URIs.
+- No transfer of credentials or assumptions that Android OS permissions are portable.
+- Cross-host fixtures and round-trip acceptance before presenting the bridge to users.
 
-### Conversation Persistence
-- [ ] `LinuxStorage.storeConversation()` / `loadConversation()`
-- [ ] Conversation list with pagination
-- [ ] Message ordering and deduplication
-- [ ] Provider/model metadata per message
-- [ ] Token usage tracking
+Linux's current SQLite snapshot is a different format. A migration tool for
+incompatible old Linux schemas is also separate work and must preserve the
+original database until its conversion is verified.
 
-### Local Search (No LLM Required)
-- [ ] FTS5 memory search (already in schema)
-- [ ] Conversation full-text search
-- [ ] CLI: `halo-node search "query"`
-- [ ] Search API endpoint
+## 4. Add reviewed live peer synchronization
 
-### Degraded Operation
-- [ ] Work without inference provider (local search only)
-- [ ] Work without audio devices
-- [ ] Work without network
-- [ ] Clear error messages for missing capabilities
+Live sync follows data interchange and a concrete security review:
 
-### Integration Tests
-- [ ] End-to-end: ask → inference → store → search
-- [ ] Restart survival: conversations persist
-- [ ] Provider failure handling
-- [ ] Concurrent request handling
+- Explicit pairing and user-approved data scopes.
+- Authenticated encrypted transport, peer revocation and content-free diagnostics.
+- Version negotiation, bounded transfers and interruption recovery.
+- Conflict handling that understands concurrent edits and deletion history.
+- Android and Linux implementation against one shared wire contract.
+- Cross-device restart, conflict, corruption and revocation tests.
 
----
+The existing peer JSON schemas are proposals. The transport, cryptography and
+conflict rules require an agreed design; draft examples are not implementation
+commitments or authorization to expose a network listener.
+See [sync protocol boundary](SYNC-PROTOCOL.md).
 
-## Milestone 3: Portability & Sync Foundation (Batch 004)
+## 5. Implement Linux audio and workload execution
 
-### Linux Capability Abstraction
-- [ ] CPU/RAM/Disk/Network info collection
-- [ ] Hardware capability registry
-- [ ] Thermal/power monitoring (where available)
-- [ ] Capability advertisement for sync
+Build actual Linux adapters behind the current SDK contracts:
 
-### Audio Diagnostics Enhancement
-- [ ] PipeWire device details (ports, profiles)
-- [ ] Bluetooth audio device detection (BlueZ)
-- [ ] Sample rate/format negotiation
-- [ ] Latency measurement
+- Capture/playback and route ownership for the selected ALSA/PipeWire setup.
+- Wake/VAD/STT and speech interruption/stop behavior.
+- TTS providers with measured ARM64 compatibility, voices, latency and memory use.
+- Resource admission, residency and eviction coordinated with inference.
+- Task-specific qualification for intent, chat, thinking, actions, embeddings
+  and vision before advertising them as ready.
+- Explicit provider and fallback policy; private content must not leave the node
+  through an implicit routing decision.
 
-### Node Identity
-- [ ] Ed25519 keypair generation (libsodium or Bouncy Castle)
-- [ ] Secure private key storage (encrypted, 0600)
-- [ ] Identity persistence across restarts
-- [ ] Display name management
+HiFiBerry overlays, microphone paths and speaker playback require the exact
+physical board. Android model availability is not proof that its artifact or
+native backend runs on Raspberry Pi.
 
-### Protocol Schemas
-- [ ] Kotlin data classes from JSON schemas
-- [ ] Serialization/deserialization (Kotlinx Serialization)
-- [ ] Schema version migration logic
-- [ ] Validation on ingest
+## Later extensions
 
-### Sync Architecture Document
-- [ ] Complete SYNC-PROTOCOL.md (done)
-- [ ] Threat model (done in SECURITY.md)
-- [ ] Pairing flow implementation plan
+Other hosts, additional peripherals, robot embodiments and optional peer compute
+can build on these verified boundaries. Keep the current work focused on a useful,
+recoverable local node, compatible Android contracts and demonstrated Pi behavior.
 
-### Pi 5 Documentation
-- [ ] Complete PI5-SETUP.md (done)
-- [ ] HiFiBerry overlay verification (hardware pending)
-- [ ] Performance benchmarks
-
----
-
-## Milestone 4: Sync Implementation (Batch 005+)
-
-### Discovery
-- [ ] mDNS announcement (`_halo._tcp.local`)
-- [ ] mDNS browsing for peers
-- [ ] TXT record parsing
-
-### Pairing
-- [ ] QR code generation (Android) / display (Linux)
-- [ ] 6-digit pairing code fallback
-- [ ] Fingerprint verification (SHA256 pubkey)
-- [ ] Mutual confirmation
-- [ ] Noise_XK handshake
-
-### Transport
-- [ ] TLS 1.3 or Noise protocol implementation
-- [ ] Mutual authentication
-- [ ] Session encryption
-- [ ] Connection pooling per peer
-
-### Sync Engine
-- [ ] Manifest-based incremental sync
-- [ ] Conflict resolution (LWW by revision)
-- [ ] Tombstone handling
-- [ ] Per-peer revision tracking
-- [ ] Scope-based authorization
-
-### Data Types
-- [ ] Memory entry sync
-- [ ] Conversation sync (opt-in)
-- [ ] Notebook/file sync (future)
-- [ ] Attachment sync (content-addressed)
-
----
-
-## Milestone 5: Advanced Features (Batch 006+)
-
-### Speech Pipeline
-- [ ] STT adapter (Sherpa-ONNX)
-- [ ] TTS adapter (Piper)
-- [ ] Wake word detection (Porcupine)
-- [ ] Voice activity detection
-- [ ] Audio routing (capture → STT → inference → TTS → playback)
-
-### Bluetooth/Peripherals
-- [ ] BlueZ GATT client
-- [ ] HeyCyan glasses driver
-- [ ] Generic BLE device framework
-- [ ] Wear OS companion (future)
-
-### Distributed Inference
-- [ ] Peer capability advertisement
-- [ ] Request inference from peer
-- [ ] Model offloading
-- [ ] Load balancing
-
-### Mobile/Desktop
-- [ ] Windows host (MSIX/portable)
-- [ ] macOS host (Homebrew/App bundle)
-- [ ] Android app sync integration
-
----
-
-## Long-term Vision (2027+)
-
-- **Halo Mesh**: Automatic peer discovery, opportunistic sync
-- **Collective Intelligence**: Shared memory graph across trusted peers
-- **Edge Compute**: Raspberry Pi cluster for local LLM inference
-- **Robotics Integration**: BuddyBot as mobile Halo node
-- **Privacy-Preserving ML**: Federated learning across personal devices
-
----
-
-## Success Metrics
-
-| Metric | Target |
-|--------|--------|
-| Cold start time | < 3 seconds |
-| Memory footprint (idle) | < 200 MB |
-| Inference latency (local 8B) | < 500ms TTFT |
-| Sync latency (LAN) | < 100ms |
-| Uptime (systemd) | 99.9% |
-| Test coverage (core) | > 80% |
-| ARM64/x86-64 parity | 100% |
-
----
-
-## Contributing
-
-See `AGENTS.md` for development workflow and `CONTRIBUTING.md` (future) for contribution guidelines.
+Changes follow [AGENTS.md](../AGENTS.md): canonical runtime ownership, local-first
+operation, no surprise Android edits and no GitHub Actions.

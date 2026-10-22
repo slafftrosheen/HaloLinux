@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 
 class LinuxMutationAdmissionTest {
-    @Test fun waitingWriteFailsBusyWithoutEverExecuting() = runBlocking {
+    @Test fun waitingWriteFailsBusyWithoutEverExecuting() = runBlocking<Unit> {
         val gate = LinuxMutationAdmission(waitMs = 40)
         val entered = CompletableDeferred<Unit>()
         val release = CompletableDeferred<Unit>()
@@ -38,7 +38,7 @@ class LinuxMutationAdmissionTest {
         assertEquals("next", withTimeout(1000) { gate.execute { "next" } })
     }
 
-    @Test fun admittedWriteIsNotCancelledByAdmissionTimeout() = runBlocking {
+    @Test fun admittedWriteIsNotCancelledByAdmissionTimeout() = runBlocking<Unit> {
         val gate = LinuxMutationAdmission(waitMs = 20)
         val result = gate.execute {
             delay(60)

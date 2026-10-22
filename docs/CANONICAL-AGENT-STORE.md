@@ -1,186 +1,169 @@
-# HALO-LINUX-019 — Canonical AgentRunStore / Recovery (Experimental)
+# Canonical AgentRunStore and recovery — experimental
 
-## Scope
+HaloLinux's optional `adapters/agent-store` implements the real
+`com.halo.runtime.cognition.agent.AgentRunStore` contract from the SHA-pinned
+Android Halo checkout. The canonical coordinator and recovery planner are also
+used directly. Linux owns persistence and OS integration, not a second agent
+execution model.
 
-HALO-LINUX-019 introduces **actual implementations of canonical**
-`com.halo.runtime.cognition.agent.AgentRunStore` and the real
-`DefaultAgentRecoveryPlanner`, compiled only against the SHA-pinned Halo
-source. Linux does not maintain a second copy of these interfaces.
+The active revision is recorded in `config/canonical-halo.sha`; HALO-LINUX-050
+aligns it to `5a4047fec6dc9c561969c446641b22373d5157e2`.
+Canonical cognition and the Linux agent store have compiled and passed their
+focused JVM tests. See [implementation status](IMPLEMENTATION-STATUS.md) for the
+complete optional host/package gate, current test totals and physical acceptance.
 
-- `adapters/agent-store` is an opt-in Kotlin/JVM module.
-- `SqliteAgentRunStore` stores agent runs and ordered journal steps in
-  `canonical-agent-runs.db` using SQLite WAL, foreign keys, and transactions.
-- `CanonicalAgentJson` serializes supported canonical types with explicit v1
-  schema and strict rejection of unknown versions and variants.
-- `CanonicalRecoveryInspector` asks the actual Halo planner to classify
-  nonterminal runs. **Classification never executes a recovery plan.**
-- `host/linux/src/canonical/java` adds an optional daemon recovery bridge.
-  `halo-node status` reports content-free plan counts.
-  `halo-node agent recovery` prints only this recovery-status section. Normal builds do not
-  create or initialize an agent-run database.
+## Storage and contract operations
 
-## Supported contract operations
+`SqliteAgentRunStore` uses a separate `canonical-agent-runs.db` database with
+SQLite WAL, foreign keys, ordered steps and explicit transactions. Normal
+standalone builds do not initialize this database.
 
-| Operation | Behavior |
-|---|---|
-| `create` / `get` / `observeRuns` | Typed rows and ordered step reconstruction |
-| `appendStep` | Unique step ID and journal identity, one SQL transaction |
-| `update` | CAS against prior state/timestamp; immutable ancestry; no step rewriting |
-| `children` / `createChildIfAllowed` | Atomic parent/depth/limit checks |
-| `nonTerminalRuns` | Loads canonical typed state and journal |
-| `claimResume` | Conditional one-winner state change |
-| `claimRecovery` | Conditional state change **and** recovery claim journal atomically |
-| `resolveInputIfPending` | Journaled first-writer-wins approval/clarification resolution |
+| Operation | Implemented behavior |
+| --- | --- |
+| `create`, `get`, `observeRuns` | Typed rows and ordered step reconstruction |
+| `appendStep` | Unique step and journal identities, persisted transactionally |
+| `update` | Compare-and-set against prior state/timestamp; immutable ancestry; no step rewriting |
+| `children`, `createChildIfAllowed` | Atomic parent, depth and child-limit checks |
+| `nonTerminalRuns` | Reconstruct canonical state and typed journal |
+| `claimResume` | One-winner conditional state transition |
+| `claimRecovery` | Conditional state transition and durable recovery claim in one transaction |
+| `resolveInputIfPending` | First valid durable approval/clarification resolution wins |
 
-The SQLite uniqueness constraints enforce response/turn identity, recovery
-fingerprints, input request identity, and input resolution identity. Claims
-are never split into multiple committed transactions.
+SQLite uniqueness constraints protect response/provider-turn identities, recovery
+fingerprints, pending-input identities and global tool-execution idempotency keys.
+An already-recorded claim cannot be interpreted as permission to dispatch again.
 
-## Deliberately restricted codec
+Input resolution validates the run's waiting state, requested resolution type,
+text-field bounds and single-line requirements. An expired request fails closed
+unless the explicit resolution represents expiry. Persisting an approval does
+not start a tool executor.
 
-v1 supports `RunPrepared`, `ProviderTurnStarted`,
-`ProviderTurnCompleted` **including proposed tool-call evidence**, `ResponseProduced`,
-`ResponseCommitted`, `RecoveryClaimed`, `InputRequested`, and
-`InputResolved`. The only supported clarifications are non-sensitive text;
-approval requests may be stored, but approval **does not enable a tool
-executor**. Unknown / newer `AgentStep` variants, incompatible schema,
-audio/origin metadata, and tool-producing provider responses reject explicitly.
+The observation flow is in-process; it is not a cross-process database change
+notification mechanism.
 
-This means `SqliteAgentRunStore` is **not yet a full production implementation
-for every canonical agent step**. Do not mount a production Android agent journal
-in this adapter or assume round-trip compatibility for unknown variants.
+## Versioned evidence codec
 
-## Startup behavior
+`CanonicalAgentJson` uses an explicit v1 schema and fixed type handling.
+It does not deserialize arbitrary JVM classes. Supported evidence includes:
 
-If the opt-in Gradle flag was used to build the executable, the daemon:
+| Evidence group | Scope |
+| --- | --- |
+| Run/context | Preparation, plans, context use and continuity |
+| Provider/response | Provider-turn start/completion, proposed tool calls, produced/committed responses and continuations |
+| Recovery/input | Recovery claims, clarification/approval requests and resolutions |
+| Tool history | Requests, prepared invocation, dispatch/claim, completion/failure/outcome and typed rejection |
+| Resource/guard | Resource blocking and run guard decisions |
+| Conditions | External-condition registration, satisfaction, expiry and cancellation |
 
-1. Acquires the single-instance lock.
-2. Initializes the existing local Halo SQLite database.
-3. Opens its separate versioned canonical agent database.
-4. Classifies nonterminal runs with the real canonical recovery planner.
-5. Starts normal Linux text-only runtime operation.
-6. Exposes metadata-only plan counts under `canonical_agent_recovery`.
+Typed `ActionTruth` is preserved. A proposed, dispatched or uncertain action
+must not be silently converted into confirmed success. These historical
+tool-evidence records are supported for storage and conservative classification;
+the Linux text provider path still rejects tool-producing responses.
 
-Every recovery entry reports `automaticReplayPermitted=false`.
-No `claimResume`, `claimRecovery`, provider retry or tool dispatch is
-called during startup or status reporting.
+Complex semantic-app receipts, UI transaction receipts, interaction handoffs,
+delegation evidence and direct-command authority envelopes remain unsupported.
+Certain origin/audio metadata is also rejected. Newer schema versions and
+unreviewed variants fail explicitly rather than losing replay-relevant evidence.
 
-This **is not yet** canonical `AgentRunCoordinator` or
-`CognitiveSession` execution. The existing text-only Linux turn ledger
-continues to serve user `ask` requests independently.
+Do not open an Android production journal as this database or assume every
+canonical variant can round-trip. Unknown unversioned agent stores are rejected;
+there is no implicit migration to v1.
 
-## Build
+## Startup and fresh text requests
 
-Create an isolated detached checkout at the pinned commit in
-`config/canonical-halo.sha` as explained in
-[CANONICAL-SDK-BUILD.md](CANONICAL-SDK-BUILD.md).
+The optional host:
 
-```bash
-./scripts/verify-canonical-cognition.sh ../HaloLinux-canonical
-```
+1. Acquires the daemon's single-instance lock before persistent initialization.
+2. Opens main storage and the separate canonical store.
+3. Constructs `DefaultAgentRunCoordinator(store, scope)`.
+4. Calls `prepareOutstandingRunsForRecovery()` once.
+5. Starts normal Linux text-only operation and exposes metadata-only recovery
+   counts.
 
-The command compiles real cognition and runs adapter/host tests with
-`-PhaloCanonicalCognition=true`. The standalone Raspberry Pi build does
-not need or import canonical cognition sources by default.
+Canonical startup classification can change durable run states. Depending on the
+evidence, it may retain a waiting state, suspend recoverable work or terminalize
+unrecoverable work. It does not retry inference, dispatch a tool or claim a
+resume/recovery operation.
 
-No Gradle/JVM verification has yet been executed in the environment that
-authored HALO-LINUX-019.
+The same coordinator is wired into fresh text turns. It creates the canonical
+run and journals provider/response evidence; response commitment and completion
+follow the main SQLite conversation commit. Thus the store/coordinator are
+already used, while full multi-turn `CognitiveSession` and action execution
+remain separate integration work.
 
-## Backup, secrecy, and limitations
+There is no atomic transaction across the two databases. If canonical
+finalization fails after the main conversation commits, the answer remains
+durable and the local reply exposes `NEEDS_RECONCILIATION`. Neither startup nor
+the failure path automatically regenerates or redelivers it.
 
-- Agent run requests and some journal step payloads contain **private text**.
-- The agent SQLite database is owner-private; the containing directory is 0700.
-- `halo-node storage backup` currently backs up the main Halo database **only**.
-  It **does not** include `canonical-agent-runs.db`.
-- Back up both databases consistently while the service is stopped, or use a
-  separate correctly implemented SQLite online backup for the agent database.
-  Do not copy a live SQLite main file without its WAL.
-- Do not sync or upload agent runs by default.
-- The observation flow is in-process, not cross-process DB change notifications.
-- Error handling for unknown step kinds intentionally fails instead of dropping
-  important replay evidence.
-
-## Remaining gates
-
-1. Execute pinned canonical Gradle build and fix actual compiler/API errors.
-2. Add a versioned *complete* step codec and durable action-truth encoding.
-3. Verify full canonical journal migration/roundtrip with Android fixtures.
-4. Wire an authorized canonical coordinator and run-store adapter only after
-   resource leases, user approval, and replay-safety tests pass.
-5. Add a complete, consistent backup/restore procedure for both SQLite DBs.
-6. Test ARM64/Trixie before enabling the experimental integration on the Pi 5.
-
-## Inspect after opt-in deployment
-
-The metadata-only operator command is:
+## Operator inspection
 
 ```bash
 halo-node agent recovery
 ```
 
-Standalone default builds return `{"state":"NOT_LINKED",...}`.
-Experimental pinned cognition builds return `CLASSIFICATION_ONLY` and
-grouped plan counts (not run prompts or provider payloads). This command
-does not resume work.
+Standalone builds report `NOT_LINKED`. Optional builds report
+`CLASSIFICATION_ONLY`, startup categories and remaining planner counts, with
+`automatic_replay=false` and `tool_execution=false`.
+No prompts, tool arguments or model text are exposed by this status report.
 
-A host-only regression test for this behavior is under
-`host/linux/src/canonicalTest` and runs with the opt-in verification script.
+`CanonicalRecoveryInspector` uses the real planner but executes none of its
+recommendations. Automatic and manual resume are unavailable on this host.
+An unsupported journal prevents successful initialization instead of being
+silently discarded.
 
-## HALO-LINUX-020C — canonical coordinator at startup
+## Backups and privacy
 
-The experimental host now constructs the real
-`DefaultAgentRunCoordinator(store, scope)` and calls
-`prepareOutstandingRunsForRecovery()` **once**, after acquiring the local
-daemon instance lock. That canonical operation can update durable run states:
-e.g. nonresumable/unknown external work becomes `INTERRUPTED`, pending
-approval retains a waiting state, and resumable work remains `SUSPENDED`.
-It does NOT execute actions, call the provider, or retry generation.
+Agent requests and some step payloads contain private text. The containing
+directory is owner-private (0700), and snapshots are created with mode 0600.
+Filesystem permissions are not encryption.
 
-`halo-node agent recovery` returns both remaining nonterminal planner counts
-and the *startup classification categories*. If the journal contains an
-unsupported version, daemon initialization fails closed. It does not discard
-or silently convert the unsupported evidence.
+| Command | Captured data |
+| --- | --- |
+| `halo-node storage backup /absolute/private/main.db` | Main Halo database only |
+| `halo-node agent backup /absolute/private/agent.db` | Optional canonical journal only; rejected when not linked |
+| `halo-node node backup /absolute/private/new-folder` | Main database plus optional agent database and SHA-256 manifest |
 
-Automatic resume and manual resume remain unavailable on this Linux host.
+Individual database snapshots use SQLite `VACUUM INTO`, integrity checks and a
+no-overwrite policy. The destination parent must already exist and be private.
 
-## HALO-LINUX-020E — consistent agent DB backup
+The full-node command holds the daemon mutation gate while taking both snapshots.
+Its consistency guarantee covers daemon-initiated writes; it is not an atomic
+SQLite transaction spanning both databases and cannot protect against unsupported
+external writers.
 
-Opt-in agent builds expose `halo-node agent backup /absolute/private/folder/agent.db`.
-The parent folder must exist and be owner-only (0700); the snapshot is created
-0600 using `VACUUM INTO`, verified using `PRAGMA quick_check`, and existing
-files are never overwritten. The standalone default build rejects this command
-because no canonical agent journal is linked. This is a separate backup from
-`halo-node storage backup`.
+```bash
+mkdir -p -m 700 "$HOME/halo-backups"
+halo-node node backup "$HOME/halo-backups/snapshot-001"
+python3 -B scripts/verify-node-snapshot.py "$HOME/halo-backups/snapshot-001"
+```
 
-For a **coordinated full-node backup**, stop the daemon before restoring,
-and take snapshots of both the main Halo storage and agent run journal.
-These are separate databases; this command does not provide a cross-database
-atomic snapshot.
+These backups are not encrypted and are not Android `.halobrain` archives.
+Stop the daemon before any restore; copying a live SQLite main file without its
+WAL is not a substitute for a consistent snapshot. A complete reviewed restore/
+migration workflow and cross-host archive interoperability remain future work.
 
-## HALO-LINUX-020F — strict pending human input
+## Build and remaining gates
 
-`resolveInputIfPending` now requires the run to be in the correct waiting
-state (approval versus clarification), verifies allowed resolution types, and
-enforces original text-field min/max length and single-line requirements.
-Expiry fails closed unless the resolution records an explicit Expired result.
-The first durable resolution still wins; approvals never dispatch a tool.
+Use a separate pinned checkout prepared according to
+[Canonical SDK Build](CANONICAL-SDK-BUILD.md):
 
-New regression fixtures verify proposed provider tool calls survive journaling
-without granting execution.
+```bash
+./scripts/verify-canonical-cognition.sh ../HaloLinux-canonical
+```
 
-## HALO-LINUX-020G — serialized evidence coverage
+This verifies provenance and structural contracts, then compiles/tests the real
+cognition module, Linux store and optional host and packages the executable.
+It does not enable user actions or automatic replay.
 
-The v1 codec additionally handles provider tool-call proposals, tool request,
-preparation, dispatch/claim and outcome evidence; resource blocking, typed tool
-rejections, response/continuation records, guard stops, and external-condition
-registration/completion/expiry/cancellation. SQLite enforces a unique
-idempotency key for tool execution claims.
+The remaining work is specific:
 
-The codec deliberately continues to reject unreviewed, complex semantic-app
-receipts, UI transaction receipts, interaction handoffs, delegated evidence
-records and direct-command authority envelopes. These must be added with
-lossless schema fixtures and stable canonical contracts.
+- Lossless fixtures and codecs for the currently unsupported evidence variants.
+- Reviewed migration/restore and main/canonical mismatch reconciliation.
+- Full session context and explicit user-controlled recovery admission.
+- Host authorization, resource leasing and truthful action receipts before tools.
+- ARM64/Trixie, real-provider, power-loss and sustained-operation acceptance.
+- Android archive interchange and a separately reviewed peer transport.
 
-**No storage event triggers a tool executor.** Durable historical evidence is
-necessary for safe recovery classification, never sufficient permission for a
-new external action.
+Durable evidence is necessary for safe recovery. It never provides sufficient
+authority on its own to perform a new external action.

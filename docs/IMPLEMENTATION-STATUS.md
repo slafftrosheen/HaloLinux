@@ -1,319 +1,151 @@
-# HaloLinux implementation status — HALO-LINUX-007
+# HaloLinux implementation status — HALO-LINUX-050
 
-## Implemented in source, not build-verified
-- Gradle module-direction fix (`runtime-sdk` depends on portable `host-sdk`, not vice versa).
-- Real limited runtime composition: shared event bus, resource lease manager, lifecycle.
-- Commands/queries intentionally reject unsupported execution.
-- Unix-domain socket control v1, bounds and single-instance protection.
-- Explicit memory search/delete, conversation recording, local SQLite integrity diagnostics.
-- SQLite snapshot backup with no-overwrite policy and private identity warning.
-- Read-only Linux memory/thermal reporting and test fixtures.
-- Trixie Desktop onboarding helper and documented later headless transition.
-- Expanded smoke tests, config and storage tests.
+**Updated:** 2026-10-23 Europe/Riga (execution logs dated 2026-10-22 UTC).
 
-## Not verified by execution in this development environment
-- Gradle compile/test and shadow JAR launch (dependencies unavailable).
-- Live model inference, Pi 5 ARM64 native SQLite, SQLite VACUUM INTO acceptance.
-- systemd user-service behavior, thermals, NVMe mount and actual HiFiBerry I/O.
-- All-day stability and error-recovery testing.
+The Linux JVM implementation now builds and passes executable tests on x86-64.
+Android portable sources are pinned and reproducible. Raspberry Pi 5 hardware
+acceptance and Android user-data synchronization remain separate unfinished work.
+Historical source-only claims are preserved in the
+[001–049 record](history/IMPLEMENTATION-STATUS-001-049.md); they are not the current
+verification status.
 
-## Remaining architectural work
-- Shared SDKs are still copied. See `docs/SHARED-SOURCE-STRATEGY.md`.
-- Conversation and provider interaction remain direct SDK-backed operations, **not**
-  the full canonical Halo CognitiveSession/agent execution pipeline.
-- Streaming audio/STT/TTS, autonomous actions and peer sync are not implemented.
-- `main` has the new code, but GitHub default branch remains `master` until
-  manually changed in repository settings.
+## Source and build baseline
 
-## Next pass before physical deployment
-1. Execute an actual Linux JDK 21 build and fix any compile/runtime defects.
-2. Run `scripts/smoke-test.sh`; no source review can replace this.
-3. Confirm ARM64 native SQLite on a Pi or ARM64 test machine.
-4. Install on Trixie Desktop, collect logs and fix observed hardware integration.
+| Item | Reviewed baseline |
+| --- | --- |
+| Linux integration base | `cf084290b6493014698279da799b75aac111b635` on `main` |
+| Legacy branch reviewed | `f975c97dd6c5bdc22fa15d4f580f43d6bfea2b66` on `master` |
+| Canonical Android Halo | `5a4047fec6dc9c561969c446641b22373d5157e2` |
+| Portable source snapshot | 183 files in seven modules, each SHA-256 recorded |
+| JVM / compiler | JDK 21; Kotlin 2.2.10 targeting JVM 21 |
+| Build wrapper | Gradle 8.14.3 with distribution checksum |
+| Native database binding exercised | sqlite-jdbc 3.46.1.0 on Linux x86-64 |
+| Reference device | Pi 5, Raspberry Pi OS Trixie 64-bit ARM64 |
 
-## Static repository audit
+The two Linux branch histories are retained by a reviewed reconciliation merge;
+see [branch and database reconciliation](BRANCH-RECONCILIATION.md). Android source
+files and repository history were not modified by this pass.
 
-The current 13-module build-file dependency graph was checked through the GitHub
-source API: no missing project references and no cycles. An offline equivalent
-is provided by `python3 scripts/check-module-graph.py`.
+## Executed verification
 
-This is *not* JVM compilation evidence and cannot establish ARM64 JNI support.
+The development environment is x86-64 Linux with Temurin 21.0.13+9. This is not
+a Raspberry Pi or a physical Trixie installation. Builds used a temporary Gradle
+cache; first resolution downloaded the wrapper and dependencies. Later identical
+tasks could use that cache. Counts below are JUnit XML results, including explicit
+zero failure/error/skip checks, rather than counts of source annotations.
 
-## HALO-LINUX-008–012 changes (source integrated, build not yet executed)
+| Gate | Command / scope | Result |
+| --- | --- | --- |
+| Offline source gate | `./scripts/verify-offline-source.sh` | Passed |
+| Source-update regressions | `python3 -B scripts/check-canonical-sources.py` | 18 passed |
+| Trixie shell fixtures | `python3 -B scripts/check-trixie-scripts.py` | 17 passed |
+| Snapshot verifier fixtures | `python3 -B scripts/check-snapshot-verifier.py` | 15 passed |
+| Gradle module graph | 16 declared modules, 44 project references | No missing projects or cycles |
+| Agent journal DDL | Actual Python SQLite constraints, rollback and snapshot checks | Passed |
+| Standalone JVM / packaging | `./gradlew clean build :host:linux:shadowJar --no-daemon` | Passed; 83 tests, no failures/errors/skips |
+| Complete canonical cognition gate | `./scripts/verify-canonical-cognition.sh ../HaloAndroid` | Passed; 70 tests, no failures/errors/skips; executable JAR built |
+| Standalone packaged-daemon smoke | `./scripts/smoke-test.sh --jar <standalone.jar>` | Passed; real JVM stop/restart, identity and data retained |
+| Canonical packaged-daemon smoke | `./scripts/smoke-test.sh --jar <canonical.jar>` | Passed; main + agent snapshot validation and real JVM restart |
 
-- SDK-grounded text-only cognitive turn with content-free event bus signals.
-- Process-scoped model provider, explicit `provider check`, no hidden fallback.
-- Provider activity/failure diagnostics and bounded one-at-a-time generation.
-- Optional SHA-pinned canonical Halo source mode for six portable source modules.
-- SQLite v3 content-free turn checkpoint journal with conservative restart classification.
-- Single-instance lock acquired *before* any database mutation or recovery.
-- Safe, actionable local provider errors and model-free smoke assertions.
-- JUnit coverage for fixture turns, provider failure/tool-call rejection and checkpoints.
+Standalone JUnit results: **3 inference + 31 storage + 49 host = 83 tests**.
+Canonical gate results: **2 recovery-contract + 16 agent-store + 52 host = 70
+tests**. The optional host reuses standalone tests, so its result must not be
+added to the standalone count as though every test were unique.
 
-**Do not claim full AgentRunCoordinator portability or shared artifact publication.**
-`-PhaloCanonicalRoot` allows direct canonical-source compilation but has not
-yet been tested with latest canonical SDK, and vendored SDK snapshots remain
-the default standalone build.
+Both runnable JAR manifests were checked for the exact Android pin. The default
+artifact reports `Halo-Source-Mode: snapshot` and
+`Halo-Canonical-Cognition: false`; the opt-in artifact reports `canonical` and
+`true`. This proves packaged provenance, not hardware readiness.
 
-Physical Pi 5/Trixie, JVM builds, JNI, memory pressure and actual provider
-calls still require executed acceptance evidence.
+Both smoke runs used the exact built artifacts, JDK 21 and isolated temporary
+XDG directories, with Unix sockets permitted by the execution environment. They
+verified healthy status, disabled-provider behavior, memory search, integrity,
+backup no-overwrite, complete snapshot validation, confirmed process/socket
+shutdown, and identity/data persistence in a new JVM. No installed user data or
+system service was touched. The canonical run verified both database snapshots.
 
-## HALO-LINUX-013 through 017 (source committed)
+## Changes established by this pass
 
-- **013:** Atomic SQLite transaction for text turn completion, conditional journal
-  advancement and duplicate-commit rejection. Dedicated rollback tests.
-- **014:** Canonical Halo `CognitiveRequestStarted`,
-  `CognitiveReasoningStarted`, and `InferenceObserved` metadata-only events.
-- **015:** Experimental `-PhaloCanonicalCognition=true` conditional Gradle
-  target compiles the *real* canonical `runtime/cognition` sources from the
-  SHA-pinned upstream checkout, plus direct recovery-contract tests.
-- **016:** Provider lifecycle terminality is preserved during late response
-  completion and connection checks. The underlying HTTP dispatcher is cancelled
-  and closed on shutdown.
-- **017:** Typed read-only `QueryBus` for local notes and interrupted-turn
-  counters; all other query/command types still reject execution.
+### Reproducible Android alignment
 
-### Truthful readiness
+The allowlisted portable snapshot includes the missing cognition-language and
+provider-validator implementations plus current workload, embedding and speech
+contracts. The explicit updater validates the upstream Git tree and actual file
+bytes, rejects dirty/hidden/extra sources and symlinks, handles additions/removals,
+and updates the revision and deterministic manifest together.
 
-There is **no verified Kotlin/Gradle build log** for any of these batches.
-The optional canonical agent target may discover additional dependency/API
-incompatibilities at first build. No physical Pi, Docker ARM64, audio/HiFiBerry,
-model endpoint, systemd, or 24-hour stability tests have run in this environment.
-This means the repository is still **pre-deployment source**, not accepted software.
+Gradle runs the integrity gate before Kotlin compilation. Both build modes use
+exact reviewed source roots; canonical mode verifies external Git blobs, including
+optional cognition, so a matching HEAD alone cannot hide changed compiled code.
+This is source synchronization, not an Android data transport. See
+[shared source strategy](SHARED-SOURCE-STRATEGY.md).
 
-### First execution sequence, on a network-enabled Trixie Desktop Pi
+### Build and test repairs
 
-```bash
-git clone -b main https://github.com/slafftrosheen/HaloLinux.git
-cd HaloLinux
-python3 scripts/check-module-graph.py
-./gradlew clean build --no-daemon
-./scripts/smoke-test.sh
-./scripts/preflight.sh
-```
+Thin and executable JARs previously wrote the same output path, which caused the
+first real full build to fail. They now have distinct filenames, with merged
+service descriptors and explicit source provenance in the runnable artifact.
+JDK 21 toolchains, executable entry points and bounded Gradle memory/workers give
+a consistent build baseline.
 
-The canonical cognition build is independent and opt-in:
-`./scripts/verify-canonical-cognition.sh /path/to/pinned/Halo-worktree`.
-Do not enable tools or auto-replay as a workaround for compile failures.
+Coroutine test methods now return `Unit` explicitly where required by JUnit.
+This recovered three previously undiscovered default host tests. The optional
+recovery fixture now calls preparation before inspection, matching the daemon's
+startup contract. No canonical source was patched to hide build failures.
 
-### Next software work
+The first real smoke run also exposed a Bash process-tracking defect: signaling
+the background function could leave its JVM alive and let a restart probe reach
+the previous daemon. The harness now owns the JVM PID directly, verifies process
+exit and socket removal, retains private diagnostic logs on failure and supports
+`--jar /absolute/path` to test an exact already-built artifact.
 
-1. Executed compile fixes and source/ABI compatibility matrix for canonical SDK.
-2. A real SQLite-backed implementation of canonical `AgentRunStore`, with
-   versioned step encoding and CAS semantics; no generic JVM object serialization.
-3. Demonstrate canonical `AgentRunCoordinator` startup classification and
-   recovery *without* enabling action execution.
-4. Implement host tool authorization and resource admission separately.
+### Existing data preservation
 
-## HALO-LINUX-019 — source committed, optional agent store
+Legacy master and main reused schema version 3 for different structures. Startup
+now checks migration history and required columns before altering installation
+paths or the database. Incompatible lineage, missing/malformed schema, rollback
+journals, symlinked sidecars and orphan sidecars fail with recovery guidance.
+The supported main version-2 upgrade still preserves stored content.
 
-- Real SHA-pinned canonical `AgentRunStore` interface implemented using SQLite
-  in `adapters/agent-store` under experimental `haloCanonicalCognition` flag.
-- Explicit v1 journal codec for supported text/recovery/input steps; unsupported
-  tool evidence fails closed. Unknown schemas are not deserialized dynamically.
-- Atomic resume/recovery claims, journal identity dedup, input first-writer
-  resolution, and bounded child admission.
-- Read-only startup/health inspector uses canonical recovery planner. No
-  automatic replay or tool execution.
-- Tests committed for restart, atomic CAS, duplicate journal IDs, pending input,
-  child limits, unknown variants and classification-only behavior.
-- Test execution and optional Gradle compilation **not verified**.
-- `halo-node storage backup` excludes the optional separate agent database.
-  Deployment must not treat it as a complete node backup.
+Inspection uses a private streamed DB/WAL copy because even read-only SQLite can
+create sidecars. Tests cover closed WAL and schema/data committed only in WAL,
+with original bytes, timestamps, permissions and file sets preserved. Temporary
+space equal to DB plus WAL is required at startup; see the documented
+`java.io.tmpdir` override in [branch reconciliation](BRANCH-RECONCILIATION.md).
+Snapshot verification requires standalone VACUUM output and rejects WAL-format
+inputs before opening them.
 
-## HALO-LINUX-020 — canonical journal and coordinator work
+### Trixie operation
 
-- **020A:** strict v1 codec now stores canonical provider tool-call proposals,
-  invocation/claim evidence, resource blocking, tool outcomes, and typed
-  `ActionTruth`, preserving uncertainty instead of silently treating claims
-  as successful actions.
-- **020B:** SQLite global deduplication of execution-claim idempotency keys and
-  tests for `NEVER_REPLAY` unknown external results.
-- **020C:** the opt-in daemon invokes Halo's actual
-  `DefaultAgentRunCoordinator.prepareOutstandingRunsForRecovery()` once after
-  acquiring the daemon lock. It classifies/normalizes run states; no provider,
-  tool or automatic replay is invoked.
-- **020D:** stored guard decisions and external-condition journal evidence.
-- **020E:** owner-private, no-overwrite consistent SQLite agent journal backups
-  via `halo-node agent backup /absolute/private/path.db`.
-- **020F:** resolution of durable approval/clarification requests requires
-  correct waiting state, matching resolution type, and length/line constraints.
-- **020G:** regression tests for journal truth, response commit dedup, guard
-  events and condition history.
+Preflight checks OS identity, kernel and userspace architecture, actual selected
+Java/compiler, user service state, lingering and reachable PipeWire sessions.
+Setup creates private offline configuration and preserves existing edits.
+Installation builds a fresh JAR before atomic replacement and leaves service
+start/restart/enable explicit. Documentation covers normal Trixie packages,
+Desktop/Lite, NVMe, headless transition and exact-board audio checks.
+The scripts do not upgrade the OS, edit overlays or change audio routing.
 
-**Important:** optional canonical Gradle compilation and all JUnit test
-execution remain **unverified** in this environment. The default Pi build
-continues to exclude canonical agent cognition. Host-specific semantic/UI
-receipts, complex handoffs and some direct-authority records are still
-unsupported by the strict journal codec and will fail closed. This is not
-yet a complete portable coordinator for user-facing agent execution.
+## Material limits and next acceptance
 
-## HALO-LINUX-021–023 source batches — pre-test checkpoint
+- **Pi / ARM64:** no physical Pi, ARM64 JNI run, native model benchmark, HiFiBerry
+  stream, NVMe deployment, thermal test, reboot or sustained-operation test was
+  performed. Run [pre-deployment gates](PRE-DEPLOYMENT-GATES.md) on the device.
+- **Real providers:** JVM tests use fixtures; there is no verified live-model
+  result. Explicit provider configuration remains required and no remote fallback
+  is selected automatically.
+- **Service installation:** shell fixtures and executable host tests do not prove
+  a real Trixie user-service installation, login/linger behavior or audio session.
+- **Android data:** pairing, live peer synchronization and Linux `.halobrain`
+  import/export are not implemented. Linux snapshots are not Android archives.
+- **Agent actions:** the optional real coordinator journals text runs and
+  classifies startup recovery; tools and automatic/manual recovery execution remain
+  disabled. Some complex canonical journal variants remain unsupported.
+- **Backup/recovery:** snapshots are unencrypted and contain private identity and
+  personal data. A complete external restore/migration rehearsal, legacy schema
+  converter and atomic transaction across the two databases are not provided.
+- **Artifact distribution:** source snapshots remain temporary; shared JVM artifact
+  publication and licensing/provenance review are still future work.
 
-- **021A/B:** Experimental text turns now go through the actual pinned
-  `DefaultAgentRunCoordinator`, recording `RunPrepared`, provider turn
-  evidence, `ResponseProduced` and eventual `ResponseCommitted`.
-  The main database remains responsible for the atomic local conversation
-  commit. A secondary journal mismatch is surfaced as
-  `NEEDS_RECONCILIATION` without triggering automatic inference retry.
-- **022A/B:** Host mutation gate serializes write-producing commands while
-  allowing status/health reads; `halo-node node backup /absolute/private/folder`
-  creates two SQLite snapshots where applicable, a SHA-256 manifest, and an
-  owner-only backup directory. Failure rolls back the newly created set.
-- **023A/B/C:** Read-only Python snapshot verification, corruption/privacy
-  fixtures, default daemon smoke integration and experimental
-  canonical-success/failure text-turn test sources.
-
-**Still unverified:** JVM clean build, canonical adapter/host test execution,
-full-node snapshot execution on an ARM64 host, Pi 5/Trixie audio/NVMe,
-24-hour stability, and encryption/restore operations. Do not interpret
-GitHub commits as passing integration tests. The canonical adapter remains
-experimental; no user action/tool execution or automatic recovery enabled.
-
-Before Pi deployment, collect compiler output and actual test logs. Do not
-enable the optional canonical cognition integration by default until its
-Gradle API/ABI compatibility is demonstrated against the pinned Halo worktree.
-
-## HALO-LINUX-027–030: build-readiness corrections
-
-Changes committed to `main`:
-- **027A:** Declared recovery adapter state before capturing it in the cognition
-  callback, correcting Kotlin's local variable declaration order at daemon startup.
-- **027B/C:** Enforced a bounded, valid JSON reply on the Unix socket, with a
-  regression fixture for oversized responses.
-- **028A/B:** Completion events and secondary journal finalization no longer
-  falsify a committed conversation when a client or observer fails.
-- **029:** Corrected invalid Kotlin newline/carriage-return character literal
-  escaping in the optional canonical store and matching text-input fixture.
-- **030A/B:** Enforced an encoded JSON reply-size budget before committing
-  model output as delivered. Large reply test ensures no conversation commit.
-
-### Available verification evidence
-
-- JDK 21 and a local Kotlin CLI are present in the development environment.
-- An isolated Kotlin character-literal syntax smoke check passed.
-- An isolated SQLite check confirmed `VACUUM INTO` supports a pre-created empty
-  destination file on the available SQLite installation.
-- Network DNS access to GitHub and Gradle dependency resolution are unavailable
-  in the local execution container. Consequently, **no repo Gradle build, unit
-  suite, shadow JAR, ARM64 native SQLite or Pi 5 execution has passed yet**.
-- GitHub commits are verified independently; this is not build verification.
-
-### Mandatory next execution gate
-
-On a connected Linux host with Java 21:
-
-```bash
-git clone --branch main https://github.com/slafftrosheen/HaloLinux.git
-cd HaloLinux
-python3 scripts/check-module-graph.py
-python3 scripts/check-snapshot-verifier.py
-./gradlew clean build --no-daemon --stacktrace
-./scripts/smoke-test.sh
-```
-
-After the standalone build is green, use a detached pinned Halo worktree
-to run `./scripts/verify-canonical-cognition.sh /path/to/Halo-worktree`.
-Do **not** deploy the experimental agent variant, enable tool execution,
-or assume inference readiness based only on committed source.
-
-## HALO-LINUX-031–034 — source hardening and offline test preparation
-
-- **031:** Inference output exceeding the local JSON delivery envelope now fails
-  with typed `AiErrorType.INVALID_RESPONSE` and a sanitized operator message.
-  No false durable conversation commit.
-- **032:** An explicit provider health probe that cannot acquire the inference
-  lease does not mark the still-running provider as DEGRADED. Generation and
-  probing remain serialized with separate admission time limits.
-- **033:** Added `./scripts/verify-offline-source.sh`, a single entry point
-  for Bash/Python syntax, static module graph and synthetic backup verifier
-  regressions without requiring Java, a model, or network access.
-- **034:** `halo-node ask -` now reads a bounded question from standard input,
-  avoiding sensitive question content in shell command arguments. Added stdin
-  boundary and normal-argument tests.
-
-**Source committed, execution not yet verified.** The host environment has JDK
-21 but cannot resolve GitHub/Gradle dependency hosts, so a full repository
-build or JUnit run cannot be claimed. This is still an experimental alpha host.
-
-On first connected x86-64 or Pi 5/Trixie Linux test, run:
-
-```bash
-./scripts/verify-offline-source.sh
-./gradlew clean build --no-daemon --stacktrace
-./scripts/smoke-test.sh
-```
-
-Run the separate pinned canonical cognition build only after the normal
-standalone build passes, with actual compiler output retained.
-
-## HALO-LINUX-036–038 follow-on stabilization
-
-- 036: reject partially configured inference endpoint/model pairs and relative
-  data paths, preventing a Desktop-to-systemd storage-location split.
-- 037: missing configuration still starts model-free, but an existing symlink,
-  directory, or unexpected filesystem object is rejected.
-- 038: provider generation retains its one-at-a-time inference permit until
-  SDK response validation, terminal status recording, and latency bookkeeping
-  complete. Admission failure does not mark another active request degraded.
-
-These source changes remain pending Gradle/JUnit execution.
-
-## HALO-LINUX-039–040 — safe memory search
-
-- Memory FTS excludes entries whose `expires_at` has passed, but does not
-  delete them. A regression test includes both active and expired entries.
-- IPC memory search returns up to 20 bounded note excerpts. Every record
-  reports whether its content was truncated; the result includes returned,
-  excerpted and size-omitted counts. The complete original memory stays in
-  SQLite, and the returned JSON is sized before sending.
-- No model automatically receives personal memory from this operation.
-- Kotlin/JUnit tests remain source-only pending an executable JVM build.
-
-## HALO-LINUX-041–044 safety pass
-
-- **041:** Private SQLite, XDG data/cache directories, and managed child
-  paths are rejected if relative or already symlinked. Validation occurs
-  before creating files or changing directory permissions.
-- **042:** Client requests are size-checked before transmission. Incoming
-  UTF-8 frames use strict decoding; malformed bytes are rejected rather
-  than silently replaced.
-- **043:** Local socket shutdown closes accepted and queued sockets, interrupts
-  client workers and waits a bounded 10 seconds for worker termination.
-- **044:** Write-producing operations have a 5-second admission bound. If
-  another write or long model generation owns the mutation gate, callers
-  receive `NODE_BUSY`, and their queued write does not run later.
-  Once admitted, a mutation is **not** cancelled by the admission timeout.
-
-Source and tests committed; JVM and ARM64 execution are still pending.
-
-## HALO-LINUX-045 — idempotent shutdown barrier
-
-When the shutdown hook and daemon accept thread both enter `close()`,
-the second caller now waits for the first caller's bounded worker drain and
-lock release. This prevents normal storage teardown from racing ahead of the
-socket/server cleanup. A regression test exercises concurrent close callers.
-
-The shutdown policy still has a bounded termination window; an uncooperative
-native library cannot be guaranteed to stop without actual JVM/Pi testing.
-The locally executed, isolated Kotlin/coroutines admission test passed, but
-**none of the repository's Gradle or JUnit tasks have yet been run**.
-
-## HALO-LINUX-047 — owner-private Unix control path
-
-The CLI and daemon now share `LinuxSocketPaths`. It rejects relative,
-symlinked and shared `XDG_RUNTIME_DIR` values before creating or changing
-socket directories, and creates a 0700 fallback under the user's home when
-XDG is absent. This protects the local-only API from unintentional placement
-in public directories during Desktop/systemd/headless transitions.
-
-## HALO-LINUX-046–049 pre-build checkpoint
-
-- **046A:** Canonical SQLite agent-store paths reject symlinked ancestors before creating or chmodding directories.
-- **046B:** SHA-pinned structural AgentRunStore/AgentStep compatibility check, invoked before opt-in canonical Gradle compilation.
-- **046C:** Offline executable SQLite journal constraints check, including global execution-key deduplication, recovery/input uniqueness, foreign-key rejection, rollback and a verified VACUUM snapshot.
-- **047:** Runtime socket paths reject shared, relative, and symlinked XDG runtime directories. Tests cover safe fallback to private home-owned runtime directories.
-- **048:** Main storage rejects database schemas newer than it understands. Canonical agent SQLite rejects unversioned legacy run stores instead of silently assuming v1 compatibility.
-- **049:** Offline verification parses Python files without modifying source directories with bytecode caches; script-based checks run in `python3 -B` mode.
-
-**Verification scope:** GitHub revisions and source contract symmetry are confirmed. An isolated SQLite 3.46.1 engine exercised representative claim/deduplication constraints successfully. The complete new offline preflight and repository Gradle/JUnit tests still require execution from a full local checkout. No Pi 5 or ARM64 acceptance is claimed.
+No GitHub Actions, unattended update job, new Linux planner or LAN listener was
+introduced. Continue Android alignment through reviewed pinned updates and keep
+hardware evidence separate from source/build evidence.

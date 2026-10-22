@@ -28,6 +28,8 @@ data class AiWorkloadSpec(
     val allowRemote: Boolean = true,
     val preferredRole: AiModelRole? = null,
     val allowFallback: Boolean = true,
+    /** Preflight resolved this exact target; execution must not follow later settings edits. */
+    val pinnedTarget: AiModelRef? = null,
 ) {
     val toolUseMode: ToolUseMode get() = when (tools) {
         AiFeatureRequirement.NOT_NEEDED -> ToolUseMode.NONE

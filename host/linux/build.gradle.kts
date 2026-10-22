@@ -40,10 +40,21 @@ application {
     mainClass.set("com.halo.host.linux.HaloNodeApplicationKt")
 }
 
+// Keep the thin library JAR distinct from the runnable distribution. Otherwise
+// `jar` and `shadowJar` write the same file and can invalidate each other's output.
+tasks.named<Jar>("jar") {
+    archiveClassifier.set("plain")
+}
+
 tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar") {
     archiveClassifier.set("")
+    mergeServiceFiles()
     manifest {
         attributes["Main-Class"] = "com.halo.host.linux.HaloNodeApplicationKt"
+        attributes["Implementation-Version"] = project.version.toString()
+        attributes["Halo-Canonical-Revision"] = rootProject.file("config/canonical-halo.sha").readText().trim()
+        attributes["Halo-Source-Mode"] = if (providers.gradleProperty("haloCanonicalRoot").isPresent) "canonical" else "snapshot"
+        attributes["Halo-Canonical-Cognition"] = (providers.gradleProperty("haloCanonicalCognition").orNull == "true").toString()
     }
 }
 

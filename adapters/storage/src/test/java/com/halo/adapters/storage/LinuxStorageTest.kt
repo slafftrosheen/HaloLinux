@@ -1,11 +1,14 @@
 package com.halo.adapters.storage
 
 import java.nio.file.Path
+import java.nio.file.Files
 import java.time.Instant
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import org.junit.jupiter.params.ParameterizedTest
+import org.junit.jupiter.params.provider.ValueSource
 
 class LinuxStorageTest {
     @TempDir lateinit var tempDir: Path
@@ -269,6 +272,288 @@ class LinuxStorageTest {
                     assertEquals(999, row.getInt(1))
                 }
             }
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = ["DELETE", "WAL"])
+    fun legacyMasterVersionThreeIsRejectedBeforeChangingDatabaseOrFilesystem(journalMode: String) = runTest {
+        val storage = open()
+        val now = Instant.now()
+        storage.storeMemory(MemoryRecord(
+            "preserve-memory", "Existing private note", "test", "personal",
+            1.0, null, now, now, "{}"
+        ))
+        storage.close()
+        val path = tempDir.resolve("data/halo.db")
+        java.sql.DriverManager.getConnection("jdbc:sqlite:$path").use { db ->
+            db.createStatement().use { stmt ->
+                stmt.execute("PRAGMA journal_mode = $journalMode")
+                stmt.execute("DROP TABLE turn_checkpoints")
+                // master f975c97 reused migration 3 for this incompatible journal.
+                stmt.execute("""
+                    CREATE TABLE agent_runs (
+                        run_id TEXT PRIMARY KEY, interaction_id TEXT NOT NULL,
+                        conversation_id TEXT, origin_node_id TEXT, status TEXT NOT NULL,
+                        attempt INTEGER NOT NULL DEFAULT 0 CHECK(attempt >= 0),
+                        revision INTEGER NOT NULL DEFAULT 0 CHECK(revision >= 0),
+                        checkpoint_ref TEXT, provider_id TEXT, model_id TEXT,
+                        failure_category TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+                    )
+                """.trimIndent())
+                stmt.execute("""
+                    CREATE TABLE agent_run_events (
+                        event_id TEXT PRIMARY KEY,
+                        run_id TEXT NOT NULL REFERENCES agent_runs(run_id) ON DELETE CASCADE,
+                        sequence INTEGER NOT NULL, event_type TEXT NOT NULL,
+                        schema_version INTEGER NOT NULL DEFAULT 1, payload_ref TEXT,
+                        correlation_id TEXT, created_at TEXT NOT NULL, UNIQUE(run_id, sequence)
+                    )
+                """.trimIndent())
+                stmt.execute("""
+                    INSERT INTO agent_runs(run_id,interaction_id,status,created_at,updated_at)
+                    VALUES ('legacy-run','legacy-turn','INTERRUPTED','2026-10-19T00:00:00Z','2026-10-19T00:00:00Z')
+                """.trimIndent())
+                stmt.execute("""
+                    INSERT INTO agent_run_events(event_id,run_id,sequence,event_type,created_at)
+                    VALUES ('legacy-event','legacy-run',1,'INTERRUPTED','2026-10-19T00:00:00Z')
+                """.trimIndent())
+                stmt.execute("UPDATE schema_version SET description='Add agent runs and event journal for crash recovery' WHERE version=3")
+            }
+        }
+        val originalBytes = Files.readAllBytes(path)
+        val originalModified = Files.getLastModifiedTime(path)
+        val dataPermissions = java.nio.file.attribute.PosixFilePermissions.fromString("rwxr-xr-x")
+        val dbPermissions = java.nio.file.attribute.PosixFilePermissions.fromString("rw-r--r--")
+        Files.setPosixFilePermissions(path.parent, dataPermissions)
+        Files.setPosixFilePermissions(path, dbPermissions)
+        val originalEntries = Files.list(path.parent).use { entries ->
+            entries.map { it.fileName.toString() }.toList().toSet()
+        }
+        assertFalse(Files.exists(path.resolveSibling("halo.db-wal")))
+        assertFalse(Files.exists(path.resolveSibling("halo.db-shm")))
+        val newConfig = tempDir.resolve("not-created-config")
+        val newCache = tempDir.resolve("not-created-cache")
+
+        val failure = assertThrows(IllegalArgumentException::class.java) {
+            kotlinx.coroutines.runBlocking {
+                LinuxStorage().initialize(LinuxStorageConfig(
+                    dataDir=path.parent.toString(), configDir=newConfig.toString(),
+                    cacheDir=newCache.toString()
+                ))
+            }
+        }
+        assertTrue(failure.message.orEmpty().contains("legacy master"))
+        assertTrue(failure.message.orEmpty().contains("back up"))
+        assertTrue(failure.message.orEmpty().contains("migration"))
+        assertArrayEquals(originalBytes, Files.readAllBytes(path))
+        assertEquals(originalModified, Files.getLastModifiedTime(path))
+        assertEquals(dataPermissions, Files.getPosixFilePermissions(path.parent))
+        assertEquals(dbPermissions, Files.getPosixFilePermissions(path))
+        assertEquals(originalEntries, Files.list(path.parent).use { entries ->
+            entries.map { it.fileName.toString() }.toList().toSet()
+        })
+        assertFalse(Files.exists(newConfig))
+        assertFalse(Files.exists(newCache))
+        assertFalse(Files.exists(path.resolveSibling("halo.db-wal")))
+        assertFalse(Files.exists(path.resolveSibling("halo.db-shm")))
+        java.sql.DriverManager.getConnection("jdbc:sqlite:${path.toUri()}?mode=ro").use { db ->
+            db.createStatement().use { stmt ->
+                stmt.executeQuery("SELECT content FROM memories WHERE id='preserve-memory'").use { row ->
+                    assertTrue(row.next())
+                    assertEquals("Existing private note", row.getString(1))
+                }
+                stmt.executeQuery("SELECT event_id FROM agent_run_events WHERE run_id='legacy-run'").use { row ->
+                    assertTrue(row.next())
+                    assertEquals("legacy-event", row.getString(1))
+                }
+            }
+        }
+    }
+
+    @Test fun legacySchemaCommittedOnlyInWalIsInspectedWithoutChangingSourceFiles() = runTest {
+        open().close()
+        val path = tempDir.resolve("data/halo.db")
+        java.sql.DriverManager.getConnection("jdbc:sqlite:$path").use { writer ->
+            writer.createStatement().use { stmt ->
+                stmt.execute("PRAGMA journal_mode = WAL")
+                stmt.execute("PRAGMA wal_autocheckpoint = 0")
+                stmt.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            }
+            val checkpointedBytes = Files.readAllBytes(path)
+            writer.autoCommit = false
+            writer.createStatement().use { stmt ->
+                stmt.execute("DROP TABLE turn_checkpoints")
+                stmt.execute("CREATE TABLE agent_runs(run_id TEXT PRIMARY KEY,status TEXT)")
+                stmt.execute("CREATE TABLE agent_run_events(event_id TEXT PRIMARY KEY,run_id TEXT)")
+                stmt.execute("INSERT INTO agent_runs VALUES('preserve-wal-run','INTERRUPTED')")
+                stmt.execute("INSERT INTO agent_run_events VALUES('preserve-wal-event','preserve-wal-run')")
+                stmt.execute("UPDATE schema_version SET description='Add agent runs and event journal for crash recovery' WHERE version=3")
+            }
+            writer.commit()
+            writer.autoCommit = true
+            // Keep the writer connection open: committed schema and data are
+            // present only in WAL, not in the checkpointed main database.
+            assertTrue(Files.size(path.resolveSibling("halo.db-wal")) > 0)
+            assertArrayEquals(checkpointedBytes, Files.readAllBytes(path))
+            writer.createStatement().use { stmt ->
+                stmt.executeQuery("SELECT event_id FROM agent_run_events").use { row ->
+                    assertTrue(row.next())
+                    assertEquals("preserve-wal-event", row.getString(1))
+                }
+            }
+            val before = databaseFileState(path)
+            val failure = assertThrows(IllegalArgumentException::class.java) {
+                kotlinx.coroutines.runBlocking { open() }
+            }
+            assertTrue(failure.message.orEmpty().contains("legacy master"))
+            assertEquals(before, databaseFileState(path))
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = ["-wal", "-shm", "-journal"])
+    fun symlinkedDatabaseSidecarsAreRejectedBeforeOpeningThem(suffix: String) = runTest {
+        open().close()
+        val path = tempDir.resolve("data/halo.db")
+        val outside = tempDir.resolve("outside-sidecar")
+        Files.writeString(outside, "do not follow or overwrite")
+        val original = Files.readAllBytes(path)
+        val link = path.resolveSibling("halo.db$suffix")
+        Files.createSymbolicLink(link, outside)
+        val failure = assertThrows(IllegalArgumentException::class.java) {
+            kotlinx.coroutines.runBlocking { open() }
+        }
+        assertTrue(failure.message.orEmpty().contains("symbolic links"))
+        assertTrue(Files.isSymbolicLink(link))
+        assertEquals("do not follow or overwrite", Files.readString(outside))
+        assertArrayEquals(original, Files.readAllBytes(path))
+    }
+
+    @Test fun existingRollbackJournalIsPreservedAndRequiresExplicitRecovery() = runTest {
+        open().close()
+        val path = tempDir.resolve("data/halo.db")
+        Files.writeString(path.resolveSibling("halo.db-journal"), "preserve rollback evidence")
+        val before = databaseFileState(path)
+        val failure = assertThrows(IllegalArgumentException::class.java) {
+            kotlinx.coroutines.runBlocking { open() }
+        }
+        assertTrue(failure.message.orEmpty().contains("rollback journal"))
+        assertEquals(before, databaseFileState(path))
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = ["-wal", "-shm", "-journal"])
+    fun orphanDatabaseSidecarsPreventNewDatabaseCreation(suffix: String) = runTest {
+        val path = tempDir.resolve("data/halo.db")
+        Files.createDirectories(path.parent)
+        Files.writeString(path.resolveSibling("halo.db$suffix"), "preserve orphan recovery evidence")
+        val before = databaseFileState(path)
+        val failure = assertThrows(IllegalArgumentException::class.java) {
+            kotlinx.coroutines.runBlocking { open() }
+        }
+        assertTrue(failure.message.orEmpty().contains("orphan"))
+        assertTrue(failure.message.orEmpty().contains("back up"))
+        assertEquals(before, databaseFileState(path))
+        assertFalse(Files.exists(path))
+        assertFalse(Files.exists(tempDir.resolve("config")))
+        assertFalse(Files.exists(tempDir.resolve("cache")))
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = ["-wal", "-shm", "-journal"])
+    fun orphanSidecarSymlinksPreventNewDatabaseCreation(suffix: String) = runTest {
+        val path = tempDir.resolve("data/halo.db")
+        Files.createDirectories(path.parent)
+        val outside = tempDir.resolve("orphan-target")
+        Files.writeString(outside, "do not follow orphan sidecar")
+        val link = path.resolveSibling("halo.db$suffix")
+        Files.createSymbolicLink(link, outside)
+        val failure = assertThrows(IllegalArgumentException::class.java) {
+            kotlinx.coroutines.runBlocking { open() }
+        }
+        assertTrue(failure.message.orEmpty().contains("symbolic links"))
+        assertTrue(failure.message.orEmpty().contains("back up"))
+        assertTrue(Files.isSymbolicLink(link))
+        assertEquals("do not follow orphan sidecar", Files.readString(outside))
+        assertFalse(Files.exists(path))
+        assertFalse(Files.exists(tempDir.resolve("config")))
+        assertFalse(Files.exists(tempDir.resolve("cache")))
+    }
+
+    private data class DatabaseFileState(
+        val content: List<Byte>,
+        val modified: java.nio.file.attribute.FileTime,
+        val permissions: Set<java.nio.file.attribute.PosixFilePermission>,
+    )
+
+    private fun databaseFileState(path: Path): Map<String, DatabaseFileState> =
+        Files.list(path.parent).use { entries ->
+            entries.filter { it.fileName.toString().startsWith("halo.db") }.toList().associate {
+                it.fileName.toString() to DatabaseFileState(
+                    Files.readAllBytes(it).toList(), Files.getLastModifiedTime(it), Files.getPosixFilePermissions(it)
+                )
+            }
+        }
+
+    @Test fun recordedVersionThreeWithMissingCheckpointTableIsRejectedWithoutRepair() = runTest {
+        open().close()
+        val path = tempDir.resolve("data/halo.db")
+        java.sql.DriverManager.getConnection("jdbc:sqlite:$path").use { db ->
+            db.createStatement().use { stmt ->
+                stmt.execute("PRAGMA journal_mode = DELETE")
+                stmt.execute("DROP TABLE turn_checkpoints")
+            }
+        }
+        val original = java.nio.file.Files.readAllBytes(path)
+        val failure = assertThrows(IllegalArgumentException::class.java) {
+            kotlinx.coroutines.runBlocking { open() }
+        }
+        assertTrue(failure.message.orEmpty().contains("turn_checkpoints"))
+        assertArrayEquals(original, java.nio.file.Files.readAllBytes(path))
+    }
+
+    @Test fun recordedVersionThreeWithMalformedCheckpointTableIsRejectedWithoutRepair() = runTest {
+        open().close()
+        val path = tempDir.resolve("data/halo.db")
+        java.sql.DriverManager.getConnection("jdbc:sqlite:$path").use { db ->
+            db.createStatement().use { stmt ->
+                stmt.execute("PRAGMA journal_mode = DELETE")
+                stmt.execute("DROP TABLE turn_checkpoints")
+                stmt.execute("CREATE TABLE turn_checkpoints (interaction_id TEXT PRIMARY KEY)")
+            }
+        }
+        val original = java.nio.file.Files.readAllBytes(path)
+        val failure = assertThrows(IllegalArgumentException::class.java) {
+            kotlinx.coroutines.runBlocking { open() }
+        }
+        assertTrue(failure.message.orEmpty().contains("turn_checkpoints"))
+        assertArrayEquals(original, java.nio.file.Files.readAllBytes(path))
+    }
+
+    @Test fun mainVersionTwoStillUpgradesWithoutLosingStoredContent() = runTest {
+        val original = open()
+        val now = Instant.now()
+        original.storeMemory(MemoryRecord(
+            "upgrade-memory", "Preserved during upgrade", "test", "personal",
+            1.0, null, now, now, "{}"
+        ))
+        original.close()
+        val path = tempDir.resolve("data/halo.db")
+        java.sql.DriverManager.getConnection("jdbc:sqlite:$path").use { db ->
+            db.createStatement().use { stmt ->
+                stmt.execute("DROP TABLE turn_checkpoints")
+                stmt.execute("DELETE FROM schema_version WHERE version=3")
+            }
+        }
+        val upgraded = open()
+        try {
+            assertEquals("upgrade-memory", upgraded.searchMemories("Preserved").single().id)
+            assertEquals(3, upgraded.checkDatabase().schemaVersion)
+            upgraded.beginTurn("after-upgrade")
+            assertEquals("ACCEPTED", upgraded.getTextTurnState("after-upgrade")?.state)
+        } finally {
+            upgraded.close()
         }
     }
 

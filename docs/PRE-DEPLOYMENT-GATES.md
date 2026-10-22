@@ -1,114 +1,120 @@
 # HaloLinux pre-deployment acceptance
 
-Target for the initial deployment: **Raspberry Pi 5 8 GB, Raspberry Pi OS
-Trixie 64-bit ARM64 with Desktop**, not x86-64.
+The reference target is **Raspberry Pi 5, Raspberry Pi OS Trixie 64-bit
+ARM64**, initially with Desktop. Development builds on x86-64 and fixture tests
+are useful evidence, but do not establish acceptance on the Pi. See the dated
+execution record in [implementation status](IMPLEMENTATION-STATUS.md).
 
-## Gate A — build (BLOCKING)
-From a Pi desktop Terminal (or independent Linux developer machine):
+## A. Source and JVM build
+
+Use JDK 21 and Python 3. The first Gradle run needs dependency downloads:
 
 ```bash
-./gradlew --version
-./gradlew clean build --no-daemon
-./gradlew test --no-daemon
-./gradlew :host:linux:shadowJar --no-daemon
+./scripts/verify-offline-source.sh
+./scripts/preflight.sh --build
+./gradlew clean build :host:linux:shadowJar --no-daemon
 ```
 
-No skipped compilation failures. Save the complete console log on failure.
+The build verifies the pinned Android source manifest before Kotlin compilation.
+Keep failing logs, fix failures and rerun the affected gate. Successful source
+integrity checks alone are not evidence that Kotlin code runs.
 
-## Gate B — isolated smoke (BLOCKING)
+## B. Isolated packaged-daemon smoke
+
 ```bash
 ./scripts/smoke-test.sh
 ```
 
-It exercises the real daemon, versioned local Unix IPC, persistence, SQLite FTS5,
-integrity checks, sensitive database snapshot, identity across restart and cleanup.
-This script does not touch installed user data or require a model.
+This launches the real executable JAR with temporary private XDG directories.
+It checks Unix control protocol v1, healthy runtime status, disabled-provider
+behavior, SQLite FTS5, integrity, private backups, no-overwrite protection and
+identity/data persistence across restart. It requires no model and does not
+read installed node data. Run it on the Pi to exercise ARM64 SQLite JNI.
 
-## Gate C — desktop installation (BLOCKING)
+To verify a specific already-built standalone or canonical artifact without
+rebuilding it, use `./scripts/smoke-test.sh --jar /absolute/path/to/halo-node.jar`.
+The harness tracks the JVM directly and requires its process and socket to exit
+before restart. On failure it reports the private temporary fixture path and
+retains diagnostic logs; successful fixtures are removed.
+
+## C. Trixie installation and user service
+
+Run as the normal account that will own the node:
+
 ```bash
-./scripts/preflight.sh
 ./scripts/setup-trixie-desktop.sh
 ./scripts/install.sh
 ~/.local/bin/halo-node --version
 ~/.local/bin/halo-node doctor
 ```
 
-Edit the configuration in the GUI, start the daemon manually, then validate it
-as a user-level systemd service. Do not run both manual and managed daemon at once.
+The setup preserves existing configuration and starts with inference disabled.
+The installer builds a fresh executable JAR and replaces it atomically. It
+does not start, restart or enable the service. Test a manual daemon first, stop
+it, then test `systemctl --user start halo-node`. Never run both at once.
 
-## Gate D — inference (OPTIONAL for memory-only node)
-Run one real configured model call; log **latency, RAM and thermal state**, and
-record provider/model identity. Do not substitute fixture output for proof of inference.
-A model-free storage node is a legitimate deployment mode.
+Check existing data lineage before an upgrade from legacy `master`; incompatible
+version-3 databases are refused. See [branch reconciliation](BRANCH-RECONCILIATION.md).
 
-## Gate E — headless transition (DEFERRED)
-Do not change boot targets or enable lingering during the initial desktop test.
-Confirm user-service lifetimes, XDG storage and secret injection before going headless.
-See `docs/TRIXIE-HEADLESS-MIGRATION.md`.
+## D. Real inference, when needed
 
-## Gate F — hardware (UNVERIFIED)
-Check Pi voltage/power supply, thermal behaviour, NVMe mount and disk pressure.
-Verify actual HiFiBerry card name, I2S overlays, capture route and playback; enumeration
-alone does not prove streaming audio.
+A memory-only node is supported without a model. If inference is required,
+configure the actual provider and installed model, execute a real call, and
+record provider/model identity, latency, RAM and temperature. Fixture-provider
+JUnit results do not establish model quality or Pi performance. Remote
+providers always require explicit configuration; there is no silent fallback.
 
-## Gate G — privacy and provenance (BLOCKING before public alpha)
-Review SQLite DB and WAL/SHM permissions, backups and their sensitive private
-node identity. Check SDK copy licensing/provenance and move to versioned shared
-contracts. Peer pairing/sync cannot be advertised as implemented yet.
+## E. Headless operation and reboot
 
-All gates are **pending actual execution** unless logs from the target device are supplied.
+After the manual and user-service tests pass, follow
+[desktop-to-headless migration](TRIXIE-HEADLESS-MIGRATION.md). Verify storage,
+configuration, secret injection and node identity before and after reboot.
+Enabling a user unit and enabling lingering serve different purposes; both
+need an explicit operator decision for unattended boot.
 
-## Optional gate H — HALO-LINUX-019 canonical recovery (DO NOT ENABLE ON PI YET)
+## F. Physical hardware
 
-With a SHA-pinned separate Halo checkout, run:
+On the actual Pi, verify power supply, throttling and sustained temperatures,
+NVMe mount/disk pressure, and native SQLite loading. Check the actual HiFiBerry
+board and overlay before capture/playback. ALSA enumeration and a reachable
+PipeWire session do not prove audio streaming. Halo's audio adapter currently
+provides diagnostics; STT/TTS and end-to-end capture/playback remain unfinished.
+
+## G. Private backup and restore rehearsal
+
+With a running node:
+
+```bash
+mkdir -p -m 700 "$HOME/halo-backups"
+halo-node node backup "$HOME/halo-backups/snapshot-001"
+python3 -B scripts/verify-node-snapshot.py "$HOME/halo-backups/snapshot-001"
+```
+
+The daemon holds its write gate while creating private main-storage and, when
+linked, canonical-agent snapshots plus a SHA-256 manifest. Verification checks
+file permissions, hashes, identity consistency, SQLite integrity and supported
+schemas. Snapshots contain private identity keys and personal content and are
+**not encrypted**. Keep them on trusted encrypted storage.
+
+This is not a backup of model binaries, a cross-process transaction, proof of
+authenticity, or a completed restore rehearsal. Rehearse recovery into an
+isolated data directory before relying on the installation. Do not restore over
+a running daemon or copy live SQLite files independently.
+
+## H. Optional canonical cognition integration
+
+Use a clean separate Halo checkout at `config/canonical-halo.sha`:
 
 ```bash
 ./scripts/verify-canonical-cognition.sh ../HaloLinux-canonical
 ```
 
-Pass the actual canonical cognition, SQLite agent store and optional host tests
-before building an experimental agent-enabled JAR. The standard Pi evaluation
-build omits this experimental integration. No automatic agent actions are enabled.
+This verifies exact upstream source bytes, compiles Android's real portable
+cognition module, and runs the Linux agent-store, recovery-contract and optional
+host tests. Canonical cognition is opt-in; the default Pi installation uses the
+standalone host. A passing developer build does not enable tools, autonomous
+actions or automatic replay and does not establish Pi acceptance.
 
-**Backup warning:** the existing main storage backup command does **not** back up
-the separate `canonical-agent-runs.db`. Both private databases need a
-coordinated backup/recovery plan. See `docs/CANONICAL-AGENT-STORE.md`.
-
-## Full-node private backup (HALO-LINUX-022)
-
-After the daemon is running, create a private snapshot directory parent
-(`mkdir -m 700 ~/halo-backups`), then use:
-
-```bash
-halo-node node backup "$HOME/halo-backups/snapshot-001"
-```
-
-The operation holds the daemon's write gate, so user text turns and memory
-mutations cannot straddle the two SQLite online snapshots. It creates a
-*new* 0700 directory, 0600 snapshots, and a SHA-256 manifest. The optional
-canonical agent journal is included only when linked.
-
-**This is not encrypted** and does not provide a cross-process database
-transaction, a backup of installed model binaries, or a complete external
-restore test. Store the snapshot on trusted encrypted storage. Never publish
-the folder or its private node identity to GitHub.
-
-## HALO-LINUX-025 — backup contents verification
-
-`scripts/verify-node-snapshot.py` additionally checks that the manifest's
-node ID matches the backed-up SQLite `node_identity` row, that the public and
-private identity keys are present, and (when enabled) that the agent journal
-uses the supported v1 schema and expected tables. Extra files in the
-snapshot directory are rejected. These checks verify **internal consistency**,
-not that the backup is authentic, encrypted, or safe to restore over live data.
-
-## HALO-LINUX-046C — executable SQLite journal constraints
-
-The offline gate now executes `scripts/check-agent-journal-schema.py` using
-Python's actual SQLite engine. It extracts the CREATE TABLE/INDEX statements
-from the experimental Kotlin store, checks uniqueness of execution keys and
-recovery fingerprints, first-writer resolution IDs, foreign keys, transaction
-rollback and a verified SQLite VACUUM snapshot. This does not compile the Kotlin
-adapter, validate its codecs, or prove the bundled JDBC version behaves
-identically on ARM64. It provides a fast local schema regression ahead of
-Gradle and hardware acceptance.
+Source synchronization with Android is implemented. Android/Linux peer
+pairing, archive import and live user-data synchronization remain separate
+unfinished work; see [sync protocol proposal](SYNC-PROTOCOL.md).

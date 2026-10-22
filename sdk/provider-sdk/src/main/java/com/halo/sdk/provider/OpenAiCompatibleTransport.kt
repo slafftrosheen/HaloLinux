@@ -8,6 +8,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.RequestBody.Companion.toRequestBody
 import okio.BufferedSource
 import org.json.JSONArray
@@ -40,6 +41,8 @@ class OpenAiCompatibleTransport(
     private var baseUrl: String = baseUrl.trim().trimEnd('/')
 
     private val json = "application/json".toMediaType()
+    fun withProtocol(protocol: AiWireProtocol): OpenAiCompatibleTransport =
+        OpenAiCompatibleTransport(client, baseUrl, protocol, quotaSnapshot, nowMs)
 
     /**
      * Rebinds a configurable provider to its persisted endpoint without recreating the provider
@@ -66,13 +69,13 @@ class OpenAiCompatibleTransport(
         credentialHeaderValue: String?,
         allowInsecureLocal: Boolean,
     ): Boolean = withContext(Dispatchers.IO) {
-        val url = "$baseUrl/models?limit=1"
+        val url = baseUrl.toHttpUrl().newBuilder().addPathSegment("models").build().toString()
         if (credentialHeader != null && credentialHeaderValue != null) {
             val security = credentialsAllowedFor(url, allowInsecureLocal)
             if (security == CredentialTransportResult.INSECURE_CREDENTIAL_TRANSPORT) {
                 throw AiProviderException(
                     AiErrorType.AUTHENTICATION_FAILED,
-                    "Credential transport is not secure for $url",
+                    "Credential transport requires a secure endpoint",
                     AiFailureDetails(recoverability = Recoverability.USER_ACTION_REQUIRED),
                 )
             }
@@ -89,6 +92,7 @@ class OpenAiCompatibleTransport(
         try {
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) throw transportError(response.code, response.body?.string(), response.header("Retry-After"))
+                JSONObject(response.body?.string().orEmpty()).getJSONArray("data")
                 true
             }
         } catch (e: CancellationException) {
@@ -99,6 +103,8 @@ class OpenAiCompatibleTransport(
             throw AiProviderException(AiErrorType.NETWORK_UNAVAILABLE, "Remote provider host unavailable", e)
         } catch (e: AiProviderException) {
             throw e
+        } catch (_: org.json.JSONException) {
+            throw AiProviderException(AiErrorType.INVALID_RESPONSE, "Remote provider returned invalid model metadata")
         } catch (e: Exception) {
             throw AiProviderException(AiErrorType.NETWORK_ERROR, "Remote provider connectivity check failed", e)
         }
@@ -113,13 +119,13 @@ class OpenAiCompatibleTransport(
         freeModelIds: Set<String>,
         fallbackWhenUnauthenticated: Boolean,
     ): List<AiModel> = withContext(Dispatchers.IO) {
-        val url = "$baseUrl/models?limit=200"
+        val url = baseUrl.toHttpUrl().newBuilder().addPathSegment("models").build().toString()
         if (credentialHeader != null && credentialHeaderValue != null) {
             val security = credentialsAllowedFor(url, allowInsecureLocal)
             if (security == CredentialTransportResult.INSECURE_CREDENTIAL_TRANSPORT) {
                 throw AiProviderException(
                     AiErrorType.AUTHENTICATION_FAILED,
-                    "Credential transport is not secure for $url",
+                    "Credential transport requires a secure endpoint",
                     AiFailureDetails(recoverability = recoverabilityForUnknownHost(url)),
                 )
             }
@@ -137,11 +143,12 @@ class OpenAiCompatibleTransport(
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {
                     if (response.code == 401 || response.code == 403) {
-                        return@withContext if (fallbackWhenUnauthenticated && staticHints.isNotEmpty()) staticHints else emptyList()
+                        if (fallbackWhenUnauthenticated && staticHints.isNotEmpty()) return@withContext staticHints
+                        throw transportError(response.code, response.body?.string(), response.header("Retry-After"))
                     }
                     throw transportError(response.code, response.body?.string(), response.header("Retry-After"))
                 }
-                val body = response.body?.string() ?: return@withContext staticHints.ifEmpty { emptyList() }
+                val body = response.body?.string() ?: throw AiProviderException(AiErrorType.INVALID_RESPONSE, "Empty model metadata response")
                 parseModelList(body, freeModelIds)
             }
         } catch (e: CancellationException) {
@@ -152,6 +159,8 @@ class OpenAiCompatibleTransport(
             throw AiProviderException(AiErrorType.TIMEOUT, "Remote model discovery timed out", e)
         } catch (e: UnknownHostException) {
             throw AiProviderException(AiErrorType.NETWORK_UNAVAILABLE, "Remote model discovery: host unavailable", e)
+        } catch (_: org.json.JSONException) {
+            throw AiProviderException(AiErrorType.INVALID_RESPONSE, "Remote provider returned invalid model metadata")
         } catch (e: Exception) {
             throw AiProviderException(AiErrorType.NETWORK_ERROR, "Remote model discovery failed", e)
         }
@@ -174,7 +183,7 @@ class OpenAiCompatibleTransport(
             if (security == CredentialTransportResult.INSECURE_CREDENTIAL_TRANSPORT) {
                 throw AiProviderException(
                     AiErrorType.AUTHENTICATION_FAILED,
-                    "Credential transport is not secure for $url",
+                    "Credential transport requires a secure endpoint",
                     AiFailureDetails(recoverability = Recoverability.USER_ACTION_REQUIRED),
                 )
             }
@@ -236,7 +245,7 @@ class OpenAiCompatibleTransport(
             if (security == CredentialTransportResult.INSECURE_CREDENTIAL_TRANSPORT) {
                 throw AiProviderException(
                     AiErrorType.AUTHENTICATION_FAILED,
-                    "Credential transport is not secure for $url",
+                    "Credential transport requires a secure endpoint",
                     AiFailureDetails(recoverability = Recoverability.USER_ACTION_REQUIRED),
                 )
             }
@@ -255,7 +264,12 @@ class OpenAiCompatibleTransport(
         try {
             client.newCall(httpRequest).execute().use { response ->
                 if (!response.isSuccessful) throw transportError(response.code, response.body?.string(), response.header("Retry-After"))
-                parseStreamEvents(response.body?.source(), { quotaSnapshot(it) }, { event: AiStreamEvent -> emit(event) })
+                val answer = parseStreamEvents(response.body?.source(), { quotaSnapshot(it) }, { event: AiStreamEvent -> emit(event) })
+                emit(AiStreamEvent.Completed(answer.copy(
+                    modelId = answer.modelId.orEmpty().ifBlank { model },
+                    requestedModelId = request.modelId,
+                    resolvedModelId = answer.resolvedModelId ?: model,
+                )))
             }
         } catch (e: CancellationException) {
             throw e
@@ -392,14 +406,27 @@ class OpenAiCompatibleTransport(
         val json = JSONObject(body)
         val error = json.optJSONObject("error")
         if (error != null) throw streamError(error)
-        val response = json.optJSONObject("response")
-        return if (protocol == AiWireProtocol.OPENAI_RESPONSES && response != null) {
+        val response = json.optJSONObject("response") ?: json
+        return if (protocol == AiWireProtocol.OPENAI_RESPONSES) {
             val output = response.optJSONArray("output") ?: JSONArray()
             val text = StringBuilder()
             val toolCalls = mutableListOf<ToolCall>()
             for (i in 0 until output.length()) {
                 val item = output.optJSONObject(i) ?: continue
                 when (item.optString("type")) {
+                    "message" -> {
+                        val content = item.optJSONArray("content") ?: JSONArray()
+                        for (part in 0 until content.length()) {
+                            val value = content.optJSONObject(part) ?: continue
+                            if (value.optString("type") == "output_text") text.append(value.optString("text"))
+                        }
+                    }
+                    "output_text" -> text.append(item.optString("text"))
+                    "function_call" -> {
+                        val callId = item.optString("call_id").takeIf { it.isNotBlank() }
+                            ?: throw AiProviderException(AiErrorType.INVALID_RESPONSE, "Responses function call has no call id")
+                        toolCalls += ToolCall(callId, item.getString("name"), JSONObject(item.getString("arguments")).toMap())
+                    }
                     "text" -> {
                         val textObj = item.optJSONObject("text")
                         if (textObj != null) {
@@ -432,7 +459,7 @@ class OpenAiCompatibleTransport(
                 providerId = json.optString("providerId", model),
                 modelId = model,
                 requestedModelId = requestedModelId,
-                resolvedModelId = json.optString("model", model),
+                resolvedModelId = response.optString("model", model),
             )
         } else {
             val choices = json.optJSONArray("choices") ?: throw AiProviderException(AiErrorType.INVALID_RESPONSE, "Remote provider returned no choices/output")
@@ -490,6 +517,22 @@ class OpenAiCompatibleTransport(
                 }
                 val event = runCatching { JSONObject(data) }.getOrElse { throw AiProviderException(AiErrorType.INVALID_RESPONSE, "Remote stream returned malformed SSE") }
                 event.optJSONObject("error")?.let { throw streamError(it) }
+                when (event.optString("type")) {
+                    "error" -> throw streamError(event)
+                    "response.output_text.delta" -> {
+                        val delta = event.optString("delta")
+                        if (delta.isNotEmpty()) { text.append(delta); emitEvent(AiStreamEvent.Token(delta)) }
+                        continue
+                    }
+                    "response.failed" -> throw AiProviderException(AiErrorType.INVALID_RESPONSE, "Remote response failed")
+                    "response.completed", "response.incomplete" -> {
+                        val completed = event.optJSONObject("response")
+                            ?: throw AiProviderException(AiErrorType.INVALID_RESPONSE, "Remote stream omitted final response")
+                        val answer = parseGenerateResponse(completed.toString(), resolvedModel.orEmpty(), null)
+                        quotaCollector(parseQuota(completed))
+                        return answer
+                    }
+                }
                 event.optString("model").takeIf { it.isNotBlank() }?.let { resolvedModel = it }
                 event.optJSONObject("response")?.let {
                     it.optJSONArray("output")?.let { output ->
@@ -597,10 +640,10 @@ class OpenAiCompatibleTransport(
         }
         return AiProviderException(
             type = type,
-            message = "Remote provider API error $code${detail?.let { ": $it" }.orEmpty()}",
+            message = "Remote provider API error $code",
             details = AiFailureDetails(
                 retryAfterMs = retryAfterMs,
-                providerCode = providerCode,
+                providerCode = safeProviderErrorCode(providerCode),
                 httpStatus = code,
                 recoverability = when (type) {
                     AiErrorType.AUTHENTICATION_FAILED -> Recoverability.USER_ACTION_REQUIRED
@@ -628,9 +671,9 @@ class OpenAiCompatibleTransport(
         }
         return AiProviderException(
             type = type,
-            message = "Remote stream error: $message",
+            message = "Remote stream error",
             details = AiFailureDetails(
-                providerCode = providerCode,
+                providerCode = safeProviderErrorCode(providerCode),
                 httpStatus = numericCode,
                 recoverability = when (type) {
                     AiErrorType.AUTHENTICATION_FAILED -> Recoverability.USER_ACTION_REQUIRED
@@ -643,7 +686,7 @@ class OpenAiCompatibleTransport(
     }
 
     private fun parseModelList(body: String, freeModelIds: Set<String>): List<AiModel> {
-        val data = JSONObject(body).optJSONArray("data") ?: JSONArray()
+        val data = JSONObject(body).getJSONArray("data")
         return buildList {
             for (i in 0 until data.length()) {
                 val item = data.getJSONObject(i) ?: continue
