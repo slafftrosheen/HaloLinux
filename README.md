@@ -13,6 +13,13 @@ OpenAI-compatible inference adapter, a private Unix-socket daemon, consistent
 SQLite backups and ALSA/PipeWire diagnostics. It needs no Halo-operated server.
 Local memory operations work without a model or network.
 
+**HALO-LINUX-052:** Android schema-2 archives can now be imported transactionally
+into a separate private SQLite store, with preview tokens, conflict retention,
+attachment preservation and explicit crash recovery. **This does not activate
+imported data in the JVM runtime or implement live peer sync.** See the
+[import guide](docs/ANDROID-ARCHIVE-IMPORT.md) and
+[this batch's executed tests and limits](docs/HALO-LINUX-052-VERIFICATION.md).
+
 ## Android alignment
 
 The portable production sources now match Android Halo revision
@@ -26,12 +33,16 @@ python3 -B scripts/sync-canonical-sources.py
 
 This is implemented **source synchronization**. Live Android/Linux personal-data
 sync, pairing and encrypted peer transport are not implemented. Android's
-`.halobrain` archive is the intended first data-interoperability boundary; a Linux
-SQLite node snapshot cannot currently be imported into Android.
+`.halobrain` archives now have offline inspection and lossless import-store support.
+Import compatibility is reviewed separately at Android `023ef76013b599ee7ca3513014af184a5242e2b5`;
+the runtime source pin above is unchanged. A Linux SQLite node snapshot cannot
+currently be imported into Android.
 
 - [Source ownership and reviewed updates](docs/SHARED-SOURCE-STRATEGY.md)
 - [Canonical source build](docs/CANONICAL-SDK-BUILD.md)
 - [Data synchronization boundary and proposal](docs/SYNC-PROTOCOL.md)
+- [Android archive inspection](docs/ANDROID-ARCHIVE-INTEROP.md)
+- [Android archive import and conflicts](docs/ANDROID-ARCHIVE-IMPORT.md)
 
 ## Raspberry Pi OS Trixie quick start
 
