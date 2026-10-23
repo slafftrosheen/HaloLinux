@@ -2,6 +2,7 @@ package com.halo.host.linux
 
 import com.halo.runtime.events.DefaultEventBus
 import com.halo.adapters.storage.LinuxStorage
+import com.halo.adapters.storage.LinuxPreferenceStorage
 import com.halo.runtime.kernel.resource.DefaultResourceLeaseManager
 import com.halo.sdk.runtime.CommandBus
 import com.halo.sdk.runtime.EngineContext
@@ -14,6 +15,7 @@ import com.halo.sdk.runtime.RuntimeLogger
 import com.halo.sdk.runtime.RuntimeScheduler
 import com.halo.sdk.runtime.ServiceKey
 import com.halo.sdk.runtime.ServiceRegistry
+import com.halo.sdk.runtime.Storage
 import com.halo.sdk.runtime.resource.ResourceLeaseManager
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -21,6 +23,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import org.slf4j.LoggerFactory
 import java.util.concurrent.ConcurrentHashMap
+import java.nio.file.Path
 
 /**
  * Linux composition for currently portable runtime infrastructure.
@@ -61,6 +64,10 @@ class LinuxRuntimeBridge(private val storage: LinuxStorage) {
     }
 
     suspend fun start() {
+        // Compose only after LinuxStorage has validated its database and private
+        // XDG directories. This implements canonical runtime Storage, not a fork.
+        val preferences: Storage = LinuxPreferenceStorage(Path.of(storage.getConfigDirectory()))
+        services.register(ServiceKey(Storage::class), preferences)
         services.register(ServiceKey(EventBus::class), events)
         services.register(ServiceKey(QueryBus::class), runtime.queryBus)
         services.register(ServiceKey(ResourceLeaseManager::class), resources)

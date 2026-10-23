@@ -2,6 +2,14 @@
 
 Linux host and personal compute node for the [Halo Cognitive Runtime](https://github.com/slafftrosheen/Halo).
 
+**HALO-LINUX-056:** the canonical `Storage` service now has a private,
+checksummed Linux preferences adapter with atomic batched updates, process
+locking and explicit corruption refusal. The Linux runtime registers the adapter
+after native storage initialization; `halo.db` and Android are unchanged.
+See [settings storage and recovery](docs/PREFERENCES.md) and
+[056 verification](docs/HALO-LINUX-056-VERIFICATION.md).
+This is not an Android profile sync, secrets vault or ARM64 deployment test.
+
 **HALO-LINUX-055:** native bounded PCM16 playback is available through
 `halo-node audio play`, using an explicitly selected ALSA or PipeWire output.
 Stop, interruption, timeout and JVM shutdown terminate the owned playback process.
