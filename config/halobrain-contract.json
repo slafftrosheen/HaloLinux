@@ -1,0 +1,12 @@
+{
+  "repository": "slafftrosheen/Halo",
+  "reviewed_revision": "c474e35df750ebeb896b3eacc8bacf154c344bd6",
+  "schema_version": 2,
+  "envelope_version": 1,
+  "sources": {
+    "app/src/main/java/com/halo/app/backup/BrainArchiveModels.kt": "3306463bca4e5aba934669e4b813fbb583e5b79d",
+    "app/src/main/java/com/halo/app/backup/BrainArchiveCrypto.kt": "9a1631d5736f96d1907f47b3a848d29f10783cef",
+    "app/src/main/java/com/halo/app/backup/ZipBrainExporter.kt": "071a15c1e845989c7c6a975baeef83da53b1cd60"
+  },
+  "note": "Archive compatibility reference only. Does not change config/canonical-halo.sha or claim runtime source alignment to this revision."
+}
