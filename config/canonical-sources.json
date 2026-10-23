@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repository": "https://github.com/slafftrosheen/Halo",
-  "revision": "5a4047fec6dc9c561969c446641b22373d5157e2",
+  "revision": "d1c87d5895e9c68af62a652b6dbec0d3f626f0ae",
   "modules": [
     "libraries/common",
     "libraries/halo-cognition-language",
@@ -210,7 +210,7 @@
     },
     {
       "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/AiImageProvider.kt",
-      "sha256": "2846e29f4c4567942581e8425027141afbf0b54246f24f8d1e7bda0c938926e0"
+      "sha256": "9038f4849aa6af485e820597628d4c63b2592833e21ded975472bea580494f21"
     },
     {
       "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/AiInferenceProvider.kt",
@@ -226,7 +226,7 @@
     },
     {
       "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/AiProviderRouter.kt",
-      "sha256": "86bb0d7b50c49443a40342dfc96133e2a5a8b02bd637a048cfb80a3e54d9b31f"
+      "sha256": "1cbbf4af5d4f7575045d6450687dcc957088ac8ba4dc4d4dfcfa93190be9ab80"
     },
     {
       "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/AiRoleCandidate.kt",
@@ -258,7 +258,7 @@
     },
     {
       "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/Context.kt",
-      "sha256": "592652c295e8ef1f463a8cfa3084263281884f36730c2ec732082481ed6d65aa"
+      "sha256": "0099972274c75666c36d69dd4c7bcc0c094e8a5b04150f3b54f626f2146eb588"
     },
     {
       "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/ContextOverflow.kt",
@@ -271,6 +271,14 @@
     {
       "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/EmbeddingProvider.kt",
       "sha256": "0c1c59ee51e12addd30e17577670e1c29ef2779497f9fb830de43d475489c347"
+    },
+    {
+      "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/ForwardingRemoteEventListener.kt",
+      "sha256": "f906c648c3b14e978f4948e82a10dbea7b1e31e3a2313fe05805829299c27bba"
+    },
+    {
+      "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/GuardedRemoteClient.kt",
+      "sha256": "34fa89fdf1b07cc92809ef5ffbd47c9ae7dd216540029277a59c20ff00a9269a"
     },
     {
       "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/ImageHttp.kt",
@@ -333,6 +341,10 @@
       "sha256": "a75caa2cc14969d53f3741c1f80e7a7e488380611df85cea75a6d025bceafdc0"
     },
     {
+      "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/RemoteDispatchPolicy.kt",
+      "sha256": "2fbf68b8d946a5f1e8c902935107f1eb9f6675f78bf2d8098ead45c23013a784"
+    },
+    {
       "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/RemoteProviderPresence.kt",
       "sha256": "59ff35b5cdaae5f1833fba9192ec75e4914186e4c5ce6485e5cedcdab844b7cc"
     },
@@ -354,7 +366,7 @@
     },
     {
       "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/SpeechSynthesisProvider.kt",
-      "sha256": "db1ddbd737a804c67d97560d04da6361043784fae6de0ef2586f46ead8d4d8a1"
+      "sha256": "5f314647d838c2de63f4e04a43e13dd820474e1d6a82e4d8b53c888ddad52a27"
     },
     {
       "path": "sdk/provider-sdk/src/main/java/com/halo/sdk/provider/StreamingToolCallAssembler.kt",
@@ -422,7 +434,7 @@
     },
     {
       "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/Events.kt",
-      "sha256": "dd305277631390b7eab0ea1c085c531701a2ba3bd5747a2cebbe3f2fac86f5c4"
+      "sha256": "8c0016fbfba1f3fe3c37ec5cddc3dc15aeda19b8c8c7a417391642b6e484bea1"
     },
     {
       "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/Fact.kt",
@@ -602,7 +614,7 @@
     },
     {
       "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/VoiceResponsePolicy.kt",
-      "sha256": "eb6d7c9036dd937013c6d14487eb9f1c049efcbf6dc4dadce4cea6ac27a85ff8"
+      "sha256": "8939f6a3b211b07b6fd839cb75e9eff711369420ed4628ea0651ffd1ee392154"
     },
     {
       "path": "sdk/runtime-sdk/src/main/java/com/halo/sdk/runtime/WorkloadExecutionPlan.kt",

@@ -2,6 +2,13 @@
 
 Linux host and personal compute node for the [Halo Cognitive Runtime](https://github.com/slafftrosheen/Halo).
 
+**HALO-LINUX-054:** the seven-module portable source snapshot now matches Android
+`d1c87d5895e9c68af62a652b6dbec0d3f626f0ae` (186 production files). Linux inference
+uses the canonical dispatch guard and explicit off-device consent. **The focused
+policy gate passed; full Gradle/HTTP/ARM64 acceptance has not run for this update.**
+Read [configuration changes](docs/REMOTE-INFERENCE-POLICY.md) and
+[054 verification](docs/HALO-LINUX-054-VERIFICATION.md) before installation.
+
 **HALO-LINUX-053:** a standalone, read-only Unix-socket JSON API now serves the
 Android import store. It provides opt-in raw inspection, conservative scoped memory
 search, provenance, stable pagination, an OpenAPI contract and a Python client.
@@ -30,7 +37,7 @@ imported data in the JVM runtime or implement live peer sync.** See the
 ## Android alignment
 
 The portable production sources now match Android Halo revision
-`5a4047fec6dc9c561969c446641b22373d5157e2`: **183 files in seven reviewed modules**.
+`d1c87d5895e9c68af62a652b6dbec0d3f626f0ae`: **186 files in seven reviewed modules**.
 A checked-in SHA-256 inventory and explicit updater prevent silent SDK divergence.
 The standalone build includes these sources; it does not need an Android checkout.
 
@@ -42,7 +49,7 @@ This is implemented **source synchronization**. Live Android/Linux personal-data
 sync, pairing and encrypted peer transport are not implemented. Android's
 `.halobrain` archives now have offline inspection and lossless import-store support.
 Import compatibility is reviewed separately at Android `023ef76013b599ee7ca3513014af184a5242e2b5`;
-the runtime source pin above is unchanged. A Linux SQLite node snapshot cannot
+the archive/DTO pin is separate from the updated runtime source pin. A Linux SQLite node snapshot cannot
 currently be imported into Android.
 
 - [Source ownership and reviewed updates](docs/SHARED-SOURCE-STRATEGY.md)
@@ -92,7 +99,11 @@ From a second terminal:
 To use inference, configure both an actual endpoint and an installed model.
 For endpoints requiring a key, provide `HALO_INFERENCE_API_KEY` in the protected
 process/service environment. Do not put credentials in YAML or Git. Provider
-selection is explicit; there is no automatic remote fallback.
+selection is explicit; there is no automatic remote fallback. Off-device HTTPS
+endpoints now also require `inference.allow_remote: true` (a YAML boolean).
+An endpoint or API key alone is not consent. Loopback remains available without
+this permission. Config changes require an explicit restart; see the
+[dispatch policy guide](docs/REMOTE-INFERENCE-POLICY.md).
 
 ```bash
 ~/.local/bin/halo-node provider check

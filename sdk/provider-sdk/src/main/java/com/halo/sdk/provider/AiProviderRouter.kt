@@ -87,6 +87,10 @@ data class AiExecutionDiagnostics(
  * Interface for routing AI requests to the appropriate provider.
  */
 interface AiProviderRouter {
+    /** Reloads the existing selection owner after an atomic processing-profile activation. */
+    fun reloadProcessingProfile() {}
+    /** Sharing authority captured before context preparation, including on-device model turns. */
+    val remoteDispatchRevision: Long? get() = null
     /** Independent feature opt-in, checked again at dispatch. Never replaces context/privacy gates. */
     val paidMediaAllowed: Boolean get() = false
 

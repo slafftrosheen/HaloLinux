@@ -37,4 +37,6 @@ data class StreamingSpeechPrepared(
     val sourceCaptureId: String?,
     override val id: String = java.util.UUID.randomUUID().toString(),
     override val timestamp: Long = System.currentTimeMillis(),
+    val remoteDataCategories: Set<String>? = null,
+    val remoteDispatchRevision: Long? = null,
 ) : HaloEvent

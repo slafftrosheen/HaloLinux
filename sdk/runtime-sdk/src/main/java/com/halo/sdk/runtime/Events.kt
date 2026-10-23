@@ -111,6 +111,9 @@ data class TtsRequested(
     val requiredProviderId: String? = null,
     /** Private child/Study/workspace tool narration must stay on a local voice. */
     val localOnly: Boolean = false,
+    /** Content-free source categories; null means unknown and cannot authorize hosted speech. */
+    val remoteDataCategories: Set<String>? = null,
+    val remoteDispatchRevision: Long? = null,
 ) : HaloEvent
 
 data class TtsRangeStarted(val transactionId: String, val start: Int, val end: Int,

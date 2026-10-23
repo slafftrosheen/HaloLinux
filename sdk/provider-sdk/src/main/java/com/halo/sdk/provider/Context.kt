@@ -32,6 +32,8 @@ data class AiContext(
     val memories: List<Memory> = emptyList(),
     val availableTools: List<ToolDefinition> = emptyList(),
     val screenContext: ScreenContext? = null,
+    /** Provenance only. Never reconstruct sensitive categories by parsing prompt strings. */
+    val remoteDataCategories: Set<RemoteDataCategory> = if (conversation.isEmpty()) emptySet() else setOf(RemoteDataCategory.CONVERSATION),
 ) {
     companion object {
         val EMPTY = AiContext(

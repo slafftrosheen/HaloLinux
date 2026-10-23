@@ -1,6 +1,5 @@
 package com.halo.host.linux
 
-import java.net.URI
 import java.nio.file.Files
 import java.nio.file.Path
 import org.yaml.snakeyaml.Yaml
@@ -14,6 +13,8 @@ data class NodeConfig(
     val dataDir: String?,
     val audioEnabled: Boolean,
     val configPath: String?,
+    /** Off-device text processing is opt-in, including HTTPS LAN providers. */
+    val allowRemoteInference: Boolean = false,
 ) {
     val providerConfigured: Boolean get() = !providerEndpoint.isNullOrBlank() && !providerModel.isNullOrBlank()
     val apiKey: String? get() = System.getenv("HALO_INFERENCE_API_KEY")?.takeIf(String::isNotBlank)
@@ -47,6 +48,7 @@ object NodeConfiguration {
             codePointLimit = 100_000
             maxAliasesForCollections = 0
             nestingDepthLimit = 20
+            isAllowDuplicateKeys = false
         }
         val raw = Yaml(SafeConstructor(options)).load<Any?>(yaml)
         val values: Map<*, *> = if (raw == null) emptyMap<String, Any>()
@@ -60,28 +62,7 @@ object NodeConfiguration {
         val inference = section("inference")
         val storage = section("storage")
         val audio = section("audio")
-        val endpoint = (inference["endpoint"] as? String)?.trim()?.takeIf(String::isNotBlank)
-        if (endpoint != null) {
-            val uri = runCatching { URI(endpoint) }.getOrElse {
-                throw IllegalArgumentException("Invalid inference endpoint URL")
-            }
-            require(uri.scheme in setOf("http", "https") && !uri.host.isNullOrBlank() && uri.userInfo == null && uri.query == null && uri.fragment == null) {
-                "Inference endpoint must be an HTTP(S) URL without embedded credentials, query, or fragment"
-            }
-        }
-        if (endpoint != null && endpoint.startsWith("http://", ignoreCase = true)) {
-            val host = URI(endpoint).host?.lowercase().orEmpty()
-            require(host in setOf("localhost", "127.0.0.1", "::1")) {
-                "Unencrypted inference endpoints are supported on loopback only. Use HTTPS for LAN/remote providers."
-            }
-        }
-        val model = (inference["model"] as? String)?.trim()?.takeIf(String::isNotBlank)
-        // A half-configured provider is a configuration error, not "offline
-        // mode": otherwise users can spend hours diagnosing disabled inference.
-        require((endpoint == null) == (model == null)) {
-            "Inference endpoint and model must both be set, or both omitted"
-        }
-        require(model == null || model.length <= 256) { "Invalid model identifier" }
+        val settings = LinuxInferenceSettings.from(inference)
         val configuredPath = (storage["data_dir"] as? String)?.trim()
             ?.takeIf { it.isNotBlank() }?.let { value ->
                 // Resolve once, independently of the daemon's working directory.
@@ -100,11 +81,12 @@ object NodeConfiguration {
         val enabled = audio["enabled"] as? Boolean ?: false
         return NodeConfig(
             displayName = (node["display_name"] ?: node["name"]) as? String ?: "Halo Linux Node",
-            providerEndpoint = endpoint,
-            providerModel = model,
+            providerEndpoint = settings.endpoint,
+            providerModel = settings.model,
             dataDir = configuredPath,
             audioEnabled = enabled,
             configPath = source,
+            allowRemoteInference = settings.allowRemote,
         )
     }
 }

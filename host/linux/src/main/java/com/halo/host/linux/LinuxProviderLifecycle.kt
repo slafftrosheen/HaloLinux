@@ -14,12 +14,14 @@ import com.halo.sdk.provider.CredentialProvider
 import com.halo.sdk.provider.OpenAiCompatibleTransport
 import com.halo.sdk.provider.ProviderAuthKind
 import com.halo.sdk.provider.endpointExecutionLocation
-import java.net.URI
+import com.halo.sdk.provider.withProviderDispatchPolicy
+import java.net.InetAddress
+import java.net.Proxy
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withTimeout
+import okhttp3.Dns
 import okhttp3.OkHttpClient
 
 enum class LinuxProviderPhase { DISABLED, CONFIGURED, CHECKING, AVAILABLE, INFERENCING, DEGRADED, STOPPED }
@@ -200,7 +202,11 @@ class LinuxProviderLifecycle(
         fun create(config: NodeConfig): LinuxProviderLifecycle {
             if (!config.providerConfigured) return LinuxProviderLifecycle(null, null)
             val endpoint = checkNotNull(config.providerEndpoint)
-            val uri = URI(endpoint)
+            val destination = LinuxInferenceEndpoint.parse(endpoint)
+            val providerId = "openai-compatible"
+            val dispatchPolicy = LinuxRemoteDispatchPolicy(
+                providerId, destination, config.allowRemoteInference,
+            )
             val key = config.apiKey
             val credential = object : CredentialProvider {
                 private var current = if (key == null) Credential("endpoint.none", "")
@@ -211,23 +217,31 @@ class LinuxProviderLifecycle(
                 override fun clearCredential() { current = Credential("endpoint.none", "") }
             }
             val client = OkHttpClient.Builder()
+                // Do not turn a private loopback request into a proxy disclosure.
+                .proxy(Proxy.NO_PROXY)
+                .dns(object : Dns {
+                    override fun lookup(hostname: String): List<InetAddress> =
+                        destination.resolveHost(hostname) { Dns.SYSTEM.lookup(it) }
+                })
+                .retryOnConnectionFailure(false)
                 .connectTimeout(10, TimeUnit.SECONDS)
                 .readTimeout(120, TimeUnit.SECONDS)
                 .callTimeout(120, TimeUnit.SECONDS)
-                .build()
+                .build().withProviderDispatchPolicy(dispatchPolicy, providerId)
             val provider = LinuxOpenAiCompatibleProvider(
                 LinuxProviderConfig(
+                    id = providerId,
                     baseUrl = endpoint,
                     executionLocation = endpointExecutionLocation(endpoint),
                     authKind = if (key == null) ProviderAuthKind.NONE else ProviderAuthKind.BEARER_TOKEN,
-                    allowInsecureLocalCredentialTransport = uri.scheme == "http" &&
-                        uri.host.lowercase() in setOf("localhost", "127.0.0.1", "::1"),
+                    allowInsecureLocalCredentialTransport = endpoint.startsWith("http://") && destination.isLoopback,
                 ),
                 OpenAiCompatibleTransport(client, endpoint, AiWireProtocol.OPENAI_CHAT_COMPLETIONS),
                 credential
             )
             return LinuxProviderLifecycle(provider, config.providerModel,
                 onClose = {
+                    dispatchPolicy.close()
                     client.dispatcher.cancelAll()
                     client.dispatcher.executorService.shutdown()
                     client.connectionPool.evictAll()

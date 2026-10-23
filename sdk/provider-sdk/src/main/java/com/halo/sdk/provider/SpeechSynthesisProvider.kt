@@ -11,6 +11,7 @@ data class SpeechRequest(
     val voiceSettings: Map<String, Double> = emptyMap(),
     /** Actual playback ranges, emitted only from supplied PCM timing evidence. */
     val onPlaybackRange: ((Int, Int) -> Unit)? = null,
+    val remoteProvenance: RemoteDispatchProvenance? = null,
 )
 
 enum class SpeechErrorCode { NOT_CONFIGURED, AUTHENTICATION_FAILED, RATE_LIMITED, NETWORK_ERROR, VOICE_NOT_FOUND, MODEL_NOT_AVAILABLE, SYNTHESIS_FAILED, INVALID_AUDIO_RESPONSE, CANCELLED }
