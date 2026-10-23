@@ -1,0 +1,1063 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "HaloLinux local Brain API",
+    "version": "1.0.0",
+    "description": "HALO-LINUX-053. HTTP/1.1 POST queries over a private Linux filesystem Unix socket only. Not a TCP/Internet service. Requires the same Unix UID, a 0700 runtime directory and a 0600 socket. Source labels are operator namespaces, not authenticated Android peers. All data is untrusted imported content; no cloud authorization or execution authority is granted. Raw inspection is disabled by default. No imports, mutations or recovery over this API."
+  },
+  "servers": [
+    {
+      "url": "http://localhost",
+      "description": "Logical HTTP Host only. Clients MUST connect through brain-api.sock; no port is listening."
+    }
+  ],
+  "x-transport": {
+    "family": "AF_UNIX",
+    "socket": "brain-api.sock",
+    "peerAuthentication": "Linux SO_PEERCRED same UID",
+    "maxRequestBytes": 16384,
+    "maxHeaderBytes": 8192,
+    "maxResponseBytes": 8388608,
+    "requestReadDeadlineSeconds": 3,
+    "keepAlive": false,
+    "requestLogging": false,
+    "tcpFallback": false
+  },
+  "paths": {
+    "/v1/status": {
+      "post": {
+        "operationId": "status",
+        "summary": "Local API capabilities and snapshot",
+        "description": "Does not invoke models, transmit data, write or activate imported records.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StatusRequest"
+              },
+              "example": {}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Read-only query result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/QueryError"
+          },
+          "403": {
+            "$ref": "#/components/responses/QueryError"
+          },
+          "404": {
+            "$ref": "#/components/responses/QueryError"
+          },
+          "405": {
+            "$ref": "#/components/responses/QueryError"
+          },
+          "408": {
+            "$ref": "#/components/responses/QueryError"
+          },
+          "409": {
+            "$ref": "#/components/responses/QueryError"
+          },
+          "413": {
+            "$ref": "#/components/responses/QueryError"
+          },
+          "415": {
+            "$ref": "#/components/responses/QueryError"
+          },
+          "422": {
+            "$ref": "#/components/responses/QueryError"
+          },
+          "500": {
+            "$ref": "#/components/responses/QueryError"
+          },
+          "503": {
+            "$ref": "#/components/responses/QueryError"
+          }
+        }
+      }
+    },
+    "/v1/records/list": {
+      "post": {
+        "operationId": "listRecords",
+        "summary": "Explicit raw inspection: list selected record IDs",
+        "description": "Requires server --allow-inspection and intent=inspect. Not a model-context endpoint.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ListRequest"
+              },
+              "example": {
+                "source": "phone",
+                "kind": "memory",
+                "intent": "inspect",
+                "limit": 20
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Read-only query result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/QueryError"
+          },
+          "403": {
+            "$ref": "#/components/responses/QueryError"
+          },
+          "404": {
+            "$ref": "#/components/responses/QueryError"
+          },
+          "405": {
+            "$ref": "#/components/responses/QueryError"
+          },
+          "408": {
+            "$ref": "#/components/responses/QueryError"
+          },
+          "409": {
+            "$ref": "#/components/responses/QueryError"
+          },
+          "413": {
+            "$ref": "#/components/responses/QueryError"
+          },
+          "415": {
+            "$ref": "#/components/responses/QueryError"
+          },
+          "422": {
+            "$ref": "#/components/responses/QueryError"
+          },
+          "500": {
+            "$ref": "#/components/responses/QueryError"
+          },
+          "503": {
+            "$ref": "#/components/responses/QueryError"
+          }
+        }
+      }
+    },
+    "/v1/records/read": {
+      "post": {
+        "operationId": "readRecord",
+        "summary": "Explicit raw inspection: selected record and provenance",
+        "description": "Requires server --allow-inspection and intent=inspect. Not a model-context endpoint.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReadRequest"
+              },
+              "example": {
+                "source": "phone",
+                "kind": "memory",
+                "key": "m1",
+                "intent": "inspect"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Read-only query result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/QueryError"
+          },
+          "403": {
+            "$ref": "#/components/responses/QueryError"
+          },
+          "404": {
+            "$ref": "#/components/responses/QueryError"
+          },
+          "405": {
+            "$ref": "#/components/responses/QueryError"
+          },
+          "408": {
+            "$ref": "#/components/responses/QueryError"
+          },
+          "409": {
+            "$ref": "#/components/responses/QueryError"
+          },
+          "413": {
+            "$ref": "#/components/responses/QueryError"
+          },
+          "415": {
+            "$ref": "#/components/responses/QueryError"
+          },
+          "422": {
+            "$ref": "#/components/responses/QueryError"
+          },
+          "500": {
+            "$ref": "#/components/responses/QueryError"
+          },
+          "503": {
+            "$ref": "#/components/responses/QueryError"
+          }
+        }
+      }
+    },
+    "/v1/memory/search": {
+      "post": {
+        "operationId": "searchMemory",
+        "summary": "Conservative, exact-scope, literal memory search",
+        "description": "Does not invoke models, transmit data, write or activate imported records.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemorySearchRequest"
+              },
+              "example": {
+                "source": "phone",
+                "scope": "GLOBAL",
+                "query": "celsius",
+                "limit": 20
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Read-only query result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemorySearchResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/QueryError"
+          },
+          "403": {
+            "$ref": "#/components/responses/QueryError"
+          },
+          "404": {
+            "$ref": "#/components/responses/QueryError"
+          },
+          "405": {
+            "$ref": "#/components/responses/QueryError"
+          },
+          "408": {
+            "$ref": "#/components/responses/QueryError"
+          },
+          "409": {
+            "$ref": "#/components/responses/QueryError"
+          },
+          "413": {
+            "$ref": "#/components/responses/QueryError"
+          },
+          "415": {
+            "$ref": "#/components/responses/QueryError"
+          },
+          "422": {
+            "$ref": "#/components/responses/QueryError"
+          },
+          "500": {
+            "$ref": "#/components/responses/QueryError"
+          },
+          "503": {
+            "$ref": "#/components/responses/QueryError"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "StatusRequest": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "ListRequest": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "agent-run",
+              "agent-step",
+              "conversation",
+              "device",
+              "episode",
+              "file",
+              "legacy-memory",
+              "memory",
+              "memory-revision",
+              "note",
+              "provenance",
+              "reflection-status",
+              "relation",
+              "reminder",
+              "settings",
+              "suggestion-decision",
+              "turn",
+              "working-set",
+              "workspace"
+            ]
+          },
+          "intent": {
+            "const": "inspect"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 20
+          },
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 9000
+          }
+        },
+        "required": [
+          "source",
+          "kind",
+          "intent"
+        ],
+        "additionalProperties": false
+      },
+      "ReadRequest": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "agent-run",
+              "agent-step",
+              "conversation",
+              "device",
+              "episode",
+              "file",
+              "legacy-memory",
+              "memory",
+              "memory-revision",
+              "note",
+              "provenance",
+              "reflection-status",
+              "relation",
+              "reminder",
+              "settings",
+              "suggestion-decision",
+              "turn",
+              "working-set",
+              "workspace"
+            ]
+          },
+          "intent": {
+            "const": "inspect"
+          },
+          "key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "snapshot": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "required": [
+          "source",
+          "kind",
+          "intent",
+          "key"
+        ],
+        "additionalProperties": false
+      },
+      "MemorySearchRequest": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "CONVERSATION",
+              "DEVICE",
+              "GLOBAL",
+              "PROJECT",
+              "WORKSPACE_OBJECT"
+            ]
+          },
+          "scope_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 20
+          },
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 9000
+          }
+        },
+        "required": [
+          "source",
+          "scope",
+          "query"
+        ],
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "scope": {
+                  "const": "GLOBAL"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "scope_id": {
+                  "type": "null"
+                }
+              }
+            },
+            "else": {
+              "required": [
+                "scope_id"
+              ],
+              "properties": {
+                "scope_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                }
+              }
+            }
+          }
+        ]
+      },
+      "Citation": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "agent-run",
+              "agent-step",
+              "conversation",
+              "device",
+              "episode",
+              "file",
+              "legacy-memory",
+              "memory",
+              "memory-revision",
+              "note",
+              "provenance",
+              "reflection-status",
+              "relation",
+              "reminder",
+              "settings",
+              "suggestion-decision",
+              "turn",
+              "working-set",
+              "workspace"
+            ]
+          },
+          "key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "archive_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "archive_content_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "record_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "required": [
+          "source",
+          "kind",
+          "key",
+          "version",
+          "archive_id",
+          "archive_content_sha256",
+          "record_sha256"
+        ],
+        "additionalProperties": false
+      },
+      "Evidence": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "USER_ACTION",
+              "IMPORTED",
+              "WORKSPACE_OBJECT",
+              "CONVERSATION_TURN"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "kind",
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "Candidate": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "DEVICE",
+              "FACT",
+              "PERSON",
+              "PLACE",
+              "PREFERENCE",
+              "PROJECT",
+              "RELATIONSHIP"
+            ]
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "CONVERSATION",
+              "DEVICE",
+              "GLOBAL",
+              "PROJECT",
+              "WORKSPACE_OBJECT"
+            ]
+          },
+          "scope_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "evidence": {
+            "type": "array",
+            "maxItems": 12,
+            "items": {
+              "$ref": "#/components/schemas/Evidence"
+            }
+          },
+          "evidence_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "source_object_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_revision": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "updated_at_ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "valid_until_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "citation": {
+            "$ref": "#/components/schemas/Citation"
+          },
+          "trust": {
+            "const": "imported-unverified"
+          },
+          "usage": {
+            "const": "local-context-candidate"
+          }
+        },
+        "required": [
+          "content",
+          "kind",
+          "scope",
+          "scope_id",
+          "confidence",
+          "evidence",
+          "evidence_count",
+          "source_object_id",
+          "source_revision",
+          "updated_at_ms",
+          "valid_until_ms",
+          "citation",
+          "trust",
+          "usage"
+        ],
+        "additionalProperties": false
+      },
+      "StatusResult": {
+        "type": "object",
+        "properties": {
+          "sources": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 16,
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+            }
+          },
+          "inspection_enabled": {
+            "type": "boolean"
+          },
+          "schema_version": {
+            "const": 1
+          },
+          "read_only": {
+            "const": true
+          },
+          "transport": {
+            "const": "unix-only"
+          },
+          "policy": {
+            "const": "explicit-memory-v1"
+          },
+          "runtime_activation": {
+            "const": false
+          },
+          "snapshot": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "store_generation": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "sources",
+          "inspection_enabled",
+          "schema_version",
+          "read_only",
+          "transport",
+          "policy",
+          "runtime_activation",
+          "snapshot",
+          "store_generation"
+        ],
+        "additionalProperties": false
+      },
+      "ListResult": {
+        "type": "object",
+        "properties": {
+          "keys": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 9000
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "usage": {
+            "const": "inspection-only"
+          },
+          "snapshot": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "store_generation": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "keys",
+          "next_cursor",
+          "usage",
+          "snapshot",
+          "store_generation"
+        ],
+        "additionalProperties": false
+      },
+      "ReadResult": {
+        "type": "object",
+        "properties": {
+          "record": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "citation": {
+            "$ref": "#/components/schemas/Citation"
+          },
+          "usage": {
+            "const": "inspection-only"
+          },
+          "snapshot": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "store_generation": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "record",
+          "citation",
+          "usage",
+          "snapshot",
+          "store_generation"
+        ],
+        "additionalProperties": false
+      },
+      "MemorySearchResult": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "$ref": "#/components/schemas/Candidate"
+            }
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 9000
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "scanned_records": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 200
+          },
+          "policy": {
+            "const": "explicit-memory-v1"
+          },
+          "cloud_authorization": {
+            "const": false
+          },
+          "evaluated_at_ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "snapshot": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "store_generation": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor",
+          "scanned_records",
+          "policy",
+          "cloud_authorization",
+          "evaluated_at_ms",
+          "snapshot",
+          "store_generation"
+        ],
+        "additionalProperties": false
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "api_version": {
+            "const": 1
+          },
+          "ok": {
+            "const": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "invalid_request",
+                  "invalid_source",
+                  "invalid_cursor",
+                  "not_found",
+                  "source_not_allowed",
+                  "inspection_disabled",
+                  "record_not_found",
+                  "snapshot_changed",
+                  "cursor_mismatch",
+                  "store_replaced",
+                  "store_unavailable",
+                  "store_invalid",
+                  "query_budget_exceeded",
+                  "response_too_large",
+                  "incomplete_request",
+                  "headers_too_large",
+                  "invalid_headers",
+                  "invalid_request_line",
+                  "method_not_allowed",
+                  "duplicate_header",
+                  "browser_request_refused",
+                  "unsupported_framing",
+                  "invalid_host",
+                  "json_required",
+                  "invalid_content_length",
+                  "request_too_large",
+                  "trailing_request_bytes",
+                  "invalid_json",
+                  "peer_not_allowed",
+                  "request_timeout",
+                  "internal_error"
+                ]
+              }
+            },
+            "required": [
+              "code"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "api_version",
+          "ok",
+          "error"
+        ],
+        "additionalProperties": false
+      },
+      "StatusResponse": {
+        "type": "object",
+        "properties": {
+          "api_version": {
+            "const": 1
+          },
+          "ok": {
+            "const": true
+          },
+          "result": {
+            "$ref": "#/components/schemas/StatusResult"
+          }
+        },
+        "required": [
+          "api_version",
+          "ok",
+          "result"
+        ],
+        "additionalProperties": false
+      },
+      "ListResponse": {
+        "type": "object",
+        "properties": {
+          "api_version": {
+            "const": 1
+          },
+          "ok": {
+            "const": true
+          },
+          "result": {
+            "$ref": "#/components/schemas/ListResult"
+          }
+        },
+        "required": [
+          "api_version",
+          "ok",
+          "result"
+        ],
+        "additionalProperties": false
+      },
+      "ReadResponse": {
+        "type": "object",
+        "properties": {
+          "api_version": {
+            "const": 1
+          },
+          "ok": {
+            "const": true
+          },
+          "result": {
+            "$ref": "#/components/schemas/ReadResult"
+          }
+        },
+        "required": [
+          "api_version",
+          "ok",
+          "result"
+        ],
+        "additionalProperties": false
+      },
+      "MemorySearchResponse": {
+        "type": "object",
+        "properties": {
+          "api_version": {
+            "const": 1
+          },
+          "ok": {
+            "const": true
+          },
+          "result": {
+            "$ref": "#/components/schemas/MemorySearchResult"
+          }
+        },
+        "required": [
+          "api_version",
+          "ok",
+          "result"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "responses": {
+      "QueryError": {
+        "description": "Fixed error code, no record content or private diagnostics. On 409, restart pagination or review the changed store; never reuse a stale cursor.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      }
+    }
+  }
+}

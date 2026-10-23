@@ -2,6 +2,13 @@
 
 Linux host and personal compute node for the [Halo Cognitive Runtime](https://github.com/slafftrosheen/Halo).
 
+**HALO-LINUX-053:** a standalone, read-only Unix-socket JSON API now serves the
+Android import store. It provides opt-in raw inspection, conservative scoped memory
+search, provenance, stable pagination, an OpenAPI contract and a Python client.
+**Halo app/JVM integration is deferred; there is no TCP listener or live peer sync.**
+See [API usage and boundaries](docs/BRAIN-API.md) and
+[executed checks](docs/HALO-LINUX-053-VERIFICATION.md).
+
 **HALO-LINUX-050:** standalone and optional canonical-cognition JVM builds,
 unit tests, executable JAR packaging and daemon backup/restart smoke tests have
 passed on x86-64 Linux. Raspberry Pi 5/ARM64 hardware,
@@ -43,6 +50,7 @@ currently be imported into Android.
 - [Data synchronization boundary and proposal](docs/SYNC-PROTOCOL.md)
 - [Android archive inspection](docs/ANDROID-ARCHIVE-INTEROP.md)
 - [Android archive import and conflicts](docs/ANDROID-ARCHIVE-IMPORT.md)
+- [Local Brain API and client](docs/BRAIN-API.md)
 
 ## Raspberry Pi OS Trixie quick start
 
