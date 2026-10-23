@@ -2,6 +2,13 @@
 
 Linux host and personal compute node for the [Halo Cognitive Runtime](https://github.com/slafftrosheen/Halo).
 
+**HALO-LINUX-055:** native bounded PCM16 playback is available through
+`halo-node audio play`, using an explicitly selected ALSA or PipeWire output.
+Stop, interruption, timeout and JVM shutdown terminate the owned playback process.
+No microphone, STT/TTS model, background voice pipeline or Android changes are added.
+See [playback usage](docs/PCM-PLAYBACK.md) and [055 verification](docs/HALO-LINUX-055-VERIFICATION.md).
+Physical audio and the full packaged build remain unverified in this batch.
+
 **HALO-LINUX-054:** the seven-module portable source snapshot now matches Android
 `d1c87d5895e9c68af62a652b6dbec0d3f626f0ae` (186 production files). Linux inference
 uses the canonical dispatch guard and explicit off-device consent. **The focused
@@ -164,9 +171,11 @@ automatic recovery replay and LAN control remain disabled.
 See [cognitive integration](docs/COGNITIVE-INTEGRATION.md) and
 [canonical agent-store limits](docs/CANONICAL-AGENT-STORE.md).
 
-Audio currently means diagnostics. Capture/playback, wake/VAD, STT/TTS and hardware
-routing still need Linux adapters and physical qualification. JVM build success
-does not establish ARM64 JNI, HiFiBerry or real-provider behavior on your Pi.
+Audio now includes diagnostics and explicit foreground PCM16 playback. Capture,
+wake/VAD, STT/TTS providers and speech orchestration still need Linux adapters.
+The playback adapter is not yet connected to generated speech or the Brain API.
+Executable subprocess tests do not establish ARM64, HiFiBerry or audible output
+on your Pi. See [PCM playback](docs/PCM-PLAYBACK.md).
 
 ## Source layout and documentation
 
@@ -176,7 +185,7 @@ does not establish ARM64 JNI, HiFiBerry or real-provider behavior on your Pi.
 | `adapters/inference` | Explicit SDK-backed inference provider |
 | `adapters/storage` | SQLite/FTS5, conversations, checkpoints and node identity |
 | `adapters/agent-store` | Optional canonical agent journal |
-| `adapters/audio` | ALSA/PipeWire diagnostics |
+| `adapters/audio` | ALSA/PipeWire diagnostics and cancellable PCM16 playback |
 | `sdk/*`, reviewed `libraries/*` and runtime modules | Pinned canonical production snapshot |
 | `protocol/schemas` | Local-control contracts and separately labeled peer-sync drafts |
 

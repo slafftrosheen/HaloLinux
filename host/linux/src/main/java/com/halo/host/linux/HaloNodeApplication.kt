@@ -47,6 +47,7 @@ class HaloNodeApplication : Engine {
 }
 
 fun main(args: Array<String>) {
-    val result = HaloCli.run(args)
+    val result = if (args.firstOrNull() == "audio") LinuxAudioCli.run(args.drop(1))
+        else HaloCli.run(args)
     if (result != 0) exitProcess(result)
 }

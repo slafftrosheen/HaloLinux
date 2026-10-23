@@ -2,10 +2,14 @@
 
 ## Current implementation
 
-HaloLinux currently performs **audio diagnostics only**. The host does not open a
-microphone, play audio, stream speech, select device routes, run VAD, or invoke
-STT/TTS engines. Android speech-provider support does not make those Linux features
-available automatically.
+HALO-LINUX-055 adds **explicit foreground PCM16 playback** alongside diagnostics.
+`halo-node audio play` selects an ALSA or PipeWire output and supports stop,
+interruption, timeout and shutdown cleanup. See [the PCM playback guide](PCM-PLAYBACK.md)
+for the command, format limits and exact verification boundary.
+
+The host still does not open a microphone, stream synthesized speech, run VAD,
+or invoke Linux STT/TTS engines. Android speech-provider support does not make
+those features available automatically. No playback happens during start/doctor.
 
 `LinuxAudioDiagnostics.enumerateDevices()` returns:
 
@@ -39,6 +43,8 @@ audio:
 This flag is exposed in configuration diagnostics; setting it to `true` does not
 implement an audio pipeline. Device selectors, buffer sizes and sample-rate keys
 are not supported configuration. Do not add them expecting an effect.
+The explicit `audio play` operator command does not read this flag or daemon YAML;
+its command-line backend, device and format are mandatory and apply only to that run.
 
 ## Trixie packages and user sessions
 
@@ -127,7 +133,7 @@ for that device/session only. Delete private test recordings when finished.
 
 ## Integration boundary
 
-Future Linux capture, playback, VAD, STT and TTS adapters must use the canonical
+Future Linux capture, VAD, STT/TTS and playback orchestration must use the canonical
 Halo speech/resource contracts and explicit provider selection. They must not
 silently substitute cloud providers or introduce a second speech orchestrator.
 Implement and validate real adapters before adding settings that imply working
