@@ -2,6 +2,15 @@
 
 Linux host and personal compute node for the [Halo Cognitive Runtime](https://github.com/slafftrosheen/Halo).
 
+**HALO-LINUX-057:** offline Android Brain import now recognizes archive schema 3
+and preserves Studio projects and saved versions using distinct compound version
+keys. Schema 2 remains supported. A conservative Studio format/reference gate and
+API raw-inspection contract are added, but **no Studio runtime, rendering or tool
+execution** is activated. The focused Studio gate ran; full historical suites,
+real Android app-generated fixtures, Gradle and Pi acceptance remain pending.
+See [Studio interchange](docs/ANDROID-STUDIO-ARCHIVE.md) and
+[057 verification](docs/HALO-LINUX-057-VERIFICATION.md).
+
 **HALO-LINUX-056:** the canonical `Storage` service now has a private,
 checksummed Linux preferences adapter with atomic batched updates, process
 locking and explicit corruption refusal. The Linux runtime registers the adapter
@@ -42,7 +51,7 @@ OpenAI-compatible inference adapter, a private Unix-socket daemon, consistent
 SQLite backups and ALSA/PipeWire diagnostics. It needs no Halo-operated server.
 Local memory operations work without a model or network.
 
-**HALO-LINUX-052:** Android schema-2 archives can now be imported transactionally
+**HALO-LINUX-052/057:** Android schema-2/3 archives can now be imported transactionally
 into a separate private SQLite store, with preview tokens, conflict retention,
 attachment preservation and explicit crash recovery. **This does not activate
 imported data in the JVM runtime or implement live peer sync.** See the
@@ -63,7 +72,7 @@ python3 -B scripts/sync-canonical-sources.py
 This is implemented **source synchronization**. Live Android/Linux personal-data
 sync, pairing and encrypted peer transport are not implemented. Android's
 `.halobrain` archives now have offline inspection and lossless import-store support.
-Import compatibility is reviewed separately at Android `023ef76013b599ee7ca3513014af184a5242e2b5`;
+Import compatibility is reviewed separately at Android `92370f6cd173affe1b9800fdc3b97a9e05559589`;
 the archive/DTO pin is separate from the updated runtime source pin. A Linux SQLite node snapshot cannot
 currently be imported into Android.
 

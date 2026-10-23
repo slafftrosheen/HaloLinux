@@ -30,7 +30,9 @@ def conversation(key='c1', **changes):
 
 
 def make_archive(path: Path, records: dict[str, list[dict]], archive_id: str):
-    entries = {p: b'' for paths in archive.SECTION_PATHS.values() for p in paths}
+    # API fixtures deliberately exercise legacy schema 2. Studio-only paths are
+    # valid in schema 3 and must not be emitted or declared by this producer.
+    entries = {p: b'' for name, paths in archive.SECTION_PATHS.items() if name != 'studio' for p in paths}
     for p in archive.SUPPLEMENTAL: entries[p] = b''
     entries['settings/user-settings.json'] = canonical({'values': {}, 'providerConfiguration': {}})
     for kind, values in records.items():
@@ -41,7 +43,7 @@ def make_archive(path: Path, records: dict[str, list[dict]], archive_id: str):
         archiveId=archive_id, createdAtEpochMs=3000, appVersionName='test', appVersionCode=1,
         databaseSchemaVersion=1, profile='FULL_USER_BACKUP', encrypted=False, state='COMPLETE',
         sections=[dict(name=s, version=1, itemCount=sum(1 if p.endswith('.json') else
-            len(entries[p].splitlines()) for p in paths)) for s, paths in archive.SECTION_PATHS.items()]))
+            len(entries[p].splitlines()) for p in paths)) for s, paths in archive.SECTION_PATHS.items() if s != 'studio']))
     entries['checksums.sha256'] = ''.join(hashlib.sha256(data).hexdigest()+'  '+p+'\n' for p,data in entries.items()).encode()
     entries['archive.complete'] = canonical(dict(archiveId=archive_id,
         manifestSha256=hashlib.sha256(entries['manifest.json']).hexdigest(),

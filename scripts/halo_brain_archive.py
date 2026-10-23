@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read-only Android Halo schema-2 archive inspection. Never extracts or imports.
+"""Read-only Android Halo schema-2/3 archive inspection. Never extracts or imports.
 
 See docs/ANDROID-ARCHIVE-INTEROP.md for the compatibility pin, limits and threat
 boundary. Encrypted archives require the distro's python3-cryptography package.
@@ -29,6 +29,7 @@ MAGIC = b"HALOBRAIN"
 CHUNK = 64 * 1024
 SECTION_PATHS = {
     "workspace": ("workspace/objects.jsonl",),
+    "studio": ("studio/projects.jsonl", "studio/versions.jsonl"),
     "notes": ("notes/metadata.jsonl",),
     "conversations": ("conversations/conversations.jsonl", "conversations/turns.jsonl"),
     "memory": ("memory/memories.jsonl", "memory/legacy.jsonl", "memory/revisions.jsonl"),
@@ -57,8 +58,15 @@ class Limits:
     max_expanded_bytes: int = 4 * 1024**3
     max_central_bytes: int = 16 * 1024**2
     max_record_bytes: int = 1024**2
+    max_studio_record_bytes: int = 32 * 1024**2
     max_compression_ratio: int = 200
     max_json_depth: int = 64
+
+
+def record_limit(path: str, limits: Limits) -> int:
+    # Studio sessions can contain up to 9M characters of encoded undo/redo
+    # history. Do not globally weaken the 1 MiB limit for other JSONL types.
+    return limits.max_studio_record_bytes if path in SECTION_PATHS["studio"] else limits.max_record_bytes
 
 
 class ArchiveError(Exception):
@@ -248,7 +256,7 @@ def _json_object(data: bytes, limits: Limits) -> dict:
 def _manifest(data: bytes, encrypted: bool, limits: Limits) -> tuple[dict, dict[str, int]]:
     manifest = _json_object(data, limits)
     require(manifest.get("format") == "halo-brain", "Not a Halo Brain archive.")
-    require(type(manifest.get("schemaVersion")) is int and manifest["schemaVersion"] == 2, "Only Halo Brain schema 2 is supported.")
+    require(type(manifest.get("schemaVersion")) is int and manifest["schemaVersion"] in (2, 3), "Only Halo Brain schema 2/3 is supported.")
     require(manifest.get("state") == "COMPLETE", "Archive is not complete.")
     require(manifest.get("profile") in PROFILES, "Unsupported archive profile.")
     require(type(manifest.get("encrypted")) is bool and manifest["encrypted"] == encrypted, "Encryption metadata does not match archive envelope.")
@@ -269,7 +277,11 @@ def _manifest(data: bytes, encrypted: bool, limits: Limits) -> tuple[dict, dict[
         require(type(version) is int and version == 1, "Unsupported section version.")
         require(type(count) is int and 0 <= count <= 2**31 - 1, "Invalid section item count.")
         counts[name] = count
-    require(set(SECTION_PATHS) - {"agent"} <= counts.keys(), "Required archive section is missing.")
+    required = set(SECTION_PATHS) - {"agent"}
+    if manifest["schemaVersion"] == 2:
+        required.remove("studio")
+        require("studio" not in counts, "Schema 2 cannot declare a Studio section.")
+    require(required <= counts.keys(), "Required archive section is missing.")
     require(manifest["profile"] != "FULL_USER_BACKUP" or "agent" in counts, "Full backup requires the agent section.")
     return manifest, counts
 
@@ -286,13 +298,13 @@ def _inspect_zip(stream: BinaryIO, encrypted: bool, limits: Limits) -> dict:
             digest, length, stored = hashlib.sha256(), 0, bytearray()
             with archive.open(entry) as source:
                 while True:
-                    block = source.readline(limits.max_record_bytes + 1) if entry.filename in RECORD_PATHS else source.read(CHUNK)
+                    block = source.readline(record_limit(entry.filename, limits) + 1) if entry.filename in RECORD_PATHS else source.read(CHUNK)
                     if not block: break
                     length += len(block); expanded_total += len(block)
                     require(length <= min(entry.file_size, limits.max_entry_bytes) and expanded_total <= limits.max_expanded_bytes, "Expanded entry exceeds size limit.")
                     digest.update(block)
                     if entry.filename in RECORD_PATHS:
-                        require(len(block) <= limits.max_record_bytes, "JSON record size limit exceeded.")
+                        require(len(block) <= record_limit(entry.filename, limits), "JSON record size limit exceeded.")
                         _json_object(block, limits)
                         records[entry.filename] = records.get(entry.filename, 0) + 1
                     elif entry.filename in METADATA:
@@ -304,6 +316,9 @@ def _inspect_zip(stream: BinaryIO, encrypted: bool, limits: Limits) -> dict:
             if entry.filename in RECORD_PATHS: records.setdefault(entry.filename, 0)
         require(expanded_total == total and set(METADATA) <= metadata.keys(), "Required archive metadata is missing.")
         manifest, counts = _manifest(metadata["manifest.json"], encrypted, limits)
+        if manifest["schemaVersion"] == 2:
+            require(not (set(SECTION_PATHS["studio"]) & digests.keys()),
+                    "Schema 2 contains undeclared Studio payloads.")
         _json_object(metadata["settings/user-settings.json"], limits)
         records["settings/user-settings.json"] = 1
         for section, expected in counts.items():
@@ -327,7 +342,7 @@ def _inspect_zip(stream: BinaryIO, encrypted: bool, limits: Limits) -> dict:
         require(expected_hashes == actual, "Archive checksum mismatch or incomplete checksum coverage.")
         complete = _json_object(metadata["archive.complete"], limits)
         require(complete.get("archiveId") == manifest["archiveId"] and complete.get("manifestSha256") == digests["manifest.json"] and complete.get("checksumListSha256") == digests["checksums.sha256"], "Archive completion proof is invalid.")
-        return {"integrity": "verified", "schema_version": 2, "profile": manifest["profile"], "encrypted": encrypted,
+        return {"integrity": "verified", "schema_version": manifest["schemaVersion"], "profile": manifest["profile"], "encrypted": encrypted,
             "entries": count, "expanded_bytes": total, "attachments": attachments, "sections": counts,
             "record_counts": records, "record_import": "unsupported", "record_semantics": "not_validated"}
 
@@ -387,7 +402,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.json:
             print(json.dumps(result, sort_keys=True, ensure_ascii=True))
         else:
-            print(f"Archive integrity verified: {result['profile']}; schema 2; encrypted={result['encrypted']}.")
+            print(f"Archive integrity verified: {result['profile']}; schema {result['schema_version']}; encrypted={result['encrypted']}.")
             print(f"Entries: {result['entries']}; expanded bytes: {result['expanded_bytes']}; attachments: {result['attachments']}.")
             print("Record import is not supported. Record semantics and peer trust have not been validated.")
         return 0

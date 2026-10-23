@@ -220,6 +220,7 @@ def _plan(db: sqlite3.Connection, source: str, staged: StagedArchive, policy: st
         'source':source,'policy':policy,'content_hash':staged.content_hash}
     return {'plan_token':hashlib.sha256(canonical(consent)).hexdigest(),
         'store_generation':generation,'content_sha256':staged.content_hash,'profile':staged.profile,
+        'archive_schema_version':staged.schema_version,
         'record_count':staged.record_count,'entry_count':staged.entry_count,'expanded_bytes':staged.expanded_bytes,
         'created_records':0 if already else created,'unchanged_records':staged.record_count if already else same,
         'conflicting_records':0 if already else conflicts,

@@ -134,6 +134,58 @@ class ArchiveTests(unittest.TestCase):
         self.assertEqual(proc.stdout, b"")
         return proc
 
+    def _schema3(self, projects=b'', versions=b'', declared_count=0):
+        entries = payload()
+        manifest = json.loads(entries['manifest.json'])
+        manifest['schemaVersion'] = 3
+        manifest['sections'].insert(1, {'name':'studio','version':1,'itemCount':declared_count})
+        entries['manifest.json'] = js(manifest)
+        entries['studio/projects.jsonl'] = projects
+        entries['studio/versions.jsonl'] = versions
+        return entries
+
+    def test_schema3_empty_studio_all_profiles(self):
+        for profile in ('BRAIN_ONLY','BRAIN_WITH_FILES','FULL_USER_BACKUP'):
+            entries = self._schema3()
+            if profile != 'BRAIN_ONLY':
+                entries = payload(profile)
+                manifest = json.loads(entries['manifest.json'])
+                manifest['schemaVersion'] = 3
+                manifest['sections'].insert(1, {'name':'studio','version':1,'itemCount':0})
+                entries['manifest.json'] = js(manifest)
+                entries['studio/projects.jsonl'] = b''
+                entries['studio/versions.jsonl'] = b''
+            with self.subTest(profile=profile):
+                inventory = self.good(entries)
+                self.assertEqual(inventory['schema_version'], 3)
+                self.assertEqual(inventory['sections']['studio'], 0)
+
+    def test_schema3_studio_section_count(self):
+        row = b'{"objectId":"project","revision":1,"committed":"opaque","session":"opaque"}\n'
+        inventory = self.good(self._schema3(projects=row, declared_count=1))
+        self.assertEqual(inventory['record_counts']['studio/projects.jsonl'], 1)
+
+    def test_schema3_missing_stream_rejected(self):
+        entries = self._schema3()
+        del entries['studio/versions.jsonl']
+        self.bad(zipped(seal(entries)))
+
+    def test_schema3_wrong_count_rejected(self):
+        self.bad(zipped(seal(self._schema3(declared_count=1))))
+
+    def test_schema2_studio_entries_rejected(self):
+        entries = payload()
+        entries['studio/projects.jsonl'] = b''
+        entries['studio/versions.jsonl'] = b''
+        self.bad(zipped(seal(entries)))
+
+    def test_schema3_future_section_version_rejected(self):
+        entries = self._schema3()
+        manifest = json.loads(entries['manifest.json'])
+        manifest['sections'][1]['version'] = 2
+        entries['manifest.json'] = js(manifest)
+        self.bad(zipped(seal(entries)))
+
     def test_brain_only(self): self.good()
     def test_with_files(self): self.assertEqual(self.good(payload("BRAIN_WITH_FILES"))["attachments"], 1)
     def test_full_backup(self): self.good(payload("FULL_USER_BACKUP"))
@@ -364,7 +416,7 @@ def add_bad_manifest(name, key, value):
     setattr(ArchiveTests, "test_manifest_" + name, test)
 
 
-for name, key, value in [("future", "schemaVersion", 3), ("old", "schemaVersion", 1), ("bool_version", "schemaVersion", True), ("float_version", "schemaVersion", 2.0), ("wrong_format", "format", "other"), ("incomplete", "state", "WRITING"), ("unknown_profile", "profile", "OTHER"), ("string_encryption", "encrypted", "false"), ("bad_timestamp", "createdAtEpochMs", -1)]:
+for name, key, value in [("future", "schemaVersion", 4), ("old", "schemaVersion", 1), ("bool_version", "schemaVersion", True), ("float_version", "schemaVersion", 2.0), ("wrong_format", "format", "other"), ("incomplete", "state", "WRITING"), ("unknown_profile", "profile", "OTHER"), ("string_encryption", "encrypted", "false"), ("bad_timestamp", "createdAtEpochMs", -1)]:
     add_bad_manifest(name, key, value)
 
 

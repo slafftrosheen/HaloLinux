@@ -75,11 +75,11 @@ OpenAPI 3.1.0 / API version 1. HTTP success is 200 with
 | Endpoint | Purpose |
 | --- | --- |
 | `/v1/status` | Capabilities, configured source allowlist, generation and snapshot |
-| `/v1/records/list` | Explicit inspection: bounded selected record IDs, all 19 kinds |
+| `/v1/records/list` | Explicit inspection: bounded selected record IDs, all 21 kinds |
 | `/v1/records/read` | Explicit inspection: full selected DTO plus archive/record provenance |
 | `/v1/memory/search` | Conservative memory candidates in exactly the requested scope |
 
-Unknown fields, duplicate JSON keys, non-finite numbers and wrong types fail closed.
+Unknown fields, duplicate JSON keys, non-finite numbers and wrong types fail closed. Raw Studio project/version records are inspection-only and may include untrusted embedded content; they cannot enter memory search or authorize tools.
 No import, recovery, delete, update, attachment-download, settings activation or
 agent-execution endpoint exists. The API opens only the separate import store,
 never `halo.db`. File paths, URIs, settings and agent payloads remain inert data.

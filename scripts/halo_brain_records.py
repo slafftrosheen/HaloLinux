@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verified, bounded staging for Android schema-2 records; no runtime activation.
+"""Verified, bounded staging for Android schema-2/3 records; no runtime activation.
 
 DTO reference: config/halobrain-contract.json. Raw record and entry bytes are kept
 intact. Field validation does not interpret embedded evidence, tool payloads or URIs.
@@ -11,12 +11,14 @@ from dataclasses import dataclass
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import sqlite3
 import tempfile
 import zipfile
 
 import halo_brain_archive as archive
+from halo_brain_studio import verify_stage, StudioContractError
 
 MAX_RECORDS = 100_000
 
@@ -41,6 +43,10 @@ SPECS = {
     'workspace/objects.jsonl': ('workspace', 'id', {
         'id':'id', 'type':'s', 'title':'s', 'createdAt':'l', 'updatedAt':'l',
         'source':'s', 'lifecycle':'s', 'inInbox':'b', 'indexingState':'s', 'contentRef':'s'}),
+    'studio/projects.jsonl': ('studio-project', 'objectId', {
+        'objectId':'id', 'revision':'l', 'committed':'s', 'session':'s'}),
+    'studio/versions.jsonl': ('studio-version', 'objectId', {
+        'objectId':'id', 'revision':'l', 'document':'s', 'savedAt':'l'}),
     'notes/metadata.jsonl': ('note', 'objectId', {'objectId':'id', 'body':'s', 'revision':'i'}),
     'conversations/conversations.jsonl': ('conversation', 'id', {
         'id':'id', 'createdAt':'l', 'active':'b', 'title':'s', 'updatedAt':'l', 'archived':'b'}),
@@ -89,6 +95,8 @@ SPECS = {
 PATH_BY_KIND = {spec[0]: path for path, spec in SPECS.items()}
 KINDS = frozenset(PATH_BY_KIND)
 REFERENCES = {
+    'studio-project': (('objectId','workspace'),),
+    'studio-version': (('objectId','studio-project'),),
     'note': (('objectId','workspace'),),
     'turn': (('conversationId','conversation'),),
     'memory': (('sourceObjectId','workspace'), ('sourceEpisodeId','episode')),
@@ -129,7 +137,15 @@ def _record(path: str, raw: bytes, limits: archive.Limits) -> tuple[str,str,dict
         if description.startswith('?') and value[name] is None: continue
         field_type = description[1:] if optional else description
         require(_valid(value[name], field_type), 'Android record field has an invalid type or bound.')
-    key = str(value[key_name]) if key_name else 'user-settings'
+    if kind in ('studio-project','studio-version'):
+        require(re.fullmatch(r'[A-Za-z0-9_-]{1,100}', value['objectId']) is not None,
+                'Invalid Studio project identity.')
+        require(1 <= value['revision'] <= 9_007_199_254_740_991,
+                'Invalid Studio revision.')
+    # Studio versions have a composite primary key: one project has many saved
+    # revisions. Keep the full revision as well as raw original DTO bytes.
+    key = (f"{value['objectId']}:{value['revision']}" if kind == 'studio-version' else
+           str(value[key_name]) if key_name else 'user-settings')
     return kind, key, value
 
 
@@ -145,6 +161,7 @@ class StagedArchive:
     entry_count: int
     expanded_bytes: int
     missing_file_payloads: int
+    schema_version: int = 2
 
 
 def _create_stage(db: sqlite3.Connection) -> None:
@@ -225,11 +242,11 @@ def stage_archive(path: Path | str, password: bytes | bytearray | None = None, *
                         raws = (source.read(archive.METADATA[path]+1),)
                     else:
                         # readline has a bound even though these same bytes were verified.
-                        raws = iter(lambda: source.readline(limits.max_record_bytes+1), b'')
+                        raws = iter(lambda: source.readline(archive.record_limit(path, limits)+1), b'')
                     for raw in raws:
                         count += 1
                         require(count <= max_records, 'Import record count limit exceeded.')
-                        require(len(raw) <= limits.max_record_bytes, 'Import record size limit exceeded.')
+                        require(len(raw) <= archive.record_limit(path, limits), 'Import record size limit exceeded.')
                         kind,key,value = _record(path,raw,limits)
                         try:
                             db.execute('INSERT INTO records VALUES(?,?,?,?)',
@@ -242,7 +259,14 @@ def stage_archive(path: Path | str, password: bytes | bytearray | None = None, *
                                 require(_valid(target,'id'), 'Invalid Android reference identity.')
                                 db.execute('INSERT INTO refs VALUES(?,?,?,?)',(kind,key,target_kind,target))
                         if kind == 'file': missing += _file_payload(db,value)
+        # Validate Studio's cross-record boundaries in the staging transaction.
+        # They are retained as untrusted source data and never activated.
+        try:
+            verify_stage(db, inventory['schema_version'])
+        except (StudioContractError, ValueError, KeyError, TypeError, UnicodeError):
+            raise RecordError('Unsupported Studio archive structure.') from None
         db.execute('COMMIT')
         db.execute('PRAGMA query_only=ON')
         yield StagedArchive(stage_path,db,content_hash,source_hash,manifest['archiveId'],
-            manifest['profile'],count,inventory['entries'],inventory['expanded_bytes'],missing)
+            manifest['profile'],count,inventory['entries'],inventory['expanded_bytes'],missing,
+            inventory['schema_version'])

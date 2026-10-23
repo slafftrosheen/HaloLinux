@@ -74,7 +74,7 @@ def records():
     }
 
 
-def archive_data(rows=None, archive_id='a1', *, encrypted=False, profile='FULL_USER_BACKUP', extra=None):
+def archive_data(rows=None, archive_id='a1', *, encrypted=False, profile='FULL_USER_BACKUP', extra=None, schema_version=2):
     from halo_brain_archive import SECTION_PATHS
     rows = rows if rows is not None else records()
     rows = {path: list(items) for path, items in rows.items()}
@@ -95,7 +95,7 @@ def archive_data(rows=None, archive_id='a1', *, encrypted=False, profile='FULL_U
         if all(p in entries for p in paths):
             sections.append({'name': name, 'version': 1, 'itemCount': sum(
                 1 if p.endswith('.json') else len(entries[p].splitlines()) for p in paths)})
-    manifest = {'format': 'halo-brain', 'schemaVersion': 2, 'archiveId': archive_id,
+    manifest = {'format': 'halo-brain', 'schemaVersion': schema_version, 'archiveId': archive_id,
         'createdAtEpochMs': 4, 'appVersionName': 'synthetic', 'appVersionCode': 1,
         'databaseSchemaVersion': 1, 'profile': profile, 'encrypted': encrypted,
         'state': 'COMPLETE', 'sections': sections}
@@ -144,6 +144,92 @@ class ImportTests(unittest.TestCase):
         return result
 
     def snapshot(self): return (self.store / 'brain.sqlite3').read_bytes()
+
+    def studio_rows(self):
+        from test_halo_studio_contract import doc, js, sess
+        rows=records()
+        rows['workspace/objects.jsonl'].append({
+            'id':'studio1','type':'ARTIFACT','title':'My Studio','createdAt':1,
+            'updatedAt':4,'source':'USER_CREATED','lifecycle':'ACTIVE',
+            'inInbox':False,'indexingState':'READY','contentRef':'studio:studio1'})
+        rows['studio/projects.jsonl']=[{
+            'objectId':'studio1','revision':3,'committed':js(doc()),'session':sess()}]
+        rows['studio/versions.jsonl']=[
+            {'objectId':'studio1','revision':1,'document':js(doc()),'savedAt':1},
+            {'objectId':'studio1','revision':3,'document':js(doc()),'savedAt':4}]
+        return rows
+
+    def test_schema3_preserves_projects_and_distinct_versions(self):
+        rows=self.studio_rows()
+        self.make(rows=rows,schema_version=3)
+        with self.stage.stage_archive(self.archive,temp_dir=self.root) as staged:
+            self.assertEqual(staged.schema_version,3)
+            plan=self.mod.plan_import(self.store,'phone',staged)
+            self.assertEqual(plan['archive_schema_version'],3)
+            self.assertEqual(plan['created_records'],23)
+            self.assertFalse(plan['runtime_activation'])
+            self.assertEqual(plan['unresolved_references'],0)
+            result=self.mod.apply_import(self.store,'phone',staged,
+                expected_token=plan['plan_token'],allow_plaintext=True)
+            self.assertEqual(result['created_records'],23)
+        self.assertEqual(self.mod.get_record(self.store,'phone','studio-project','studio1'), rows['studio/projects.jsonl'][0])
+        self.assertEqual(self.mod.get_record(self.store,'phone','studio-version','studio1:1'),rows['studio/versions.jsonl'][0])
+        self.assertEqual(self.mod.get_record(self.store,'phone','studio-version','studio1:3'),rows['studio/versions.jsonl'][1])
+
+    def test_schema3_empty_studio_preserves_old_record_counts(self):
+        rows=records()
+        rows['studio/projects.jsonl']=[]
+        rows['studio/versions.jsonl']=[]
+        self.make(rows=rows,schema_version=3)
+        with self.stage.stage_archive(self.archive,temp_dir=self.root) as staged:
+            self.assertEqual(staged.record_count,19)
+            self.assertEqual(staged.schema_version,3)
+
+    def test_schema3_duplicate_version_identity_fails(self):
+        rows=self.studio_rows()
+        rows['studio/versions.jsonl'].append(dict(rows['studio/versions.jsonl'][0]))
+        self.make(rows=rows,schema_version=3)
+        with self.assertRaises(self.stage.RecordError):
+            with self.stage.stage_archive(self.archive,temp_dir=self.root): pass
+
+    def test_schema3_version_above_project_revision_fails(self):
+        rows=self.studio_rows()
+        rows['studio/versions.jsonl'][1]['revision']=4
+        self.make(rows=rows,schema_version=3)
+        with self.assertRaises(self.stage.RecordError):
+            with self.stage.stage_archive(self.archive,temp_dir=self.root): pass
+
+    def test_schema3_missing_project_header_fails(self):
+        rows=self.studio_rows()
+        rows['workspace/objects.jsonl']=rows['workspace/objects.jsonl'][:1]
+        self.make(rows=rows,schema_version=3)
+        with self.assertRaises(self.stage.RecordError):
+            with self.stage.stage_archive(self.archive,temp_dir=self.root): pass
+
+    def test_schema3_invalid_nested_document_version_fails(self):
+        rows=self.studio_rows()
+        invalid=json.loads(rows['studio/projects.jsonl'][0]['committed'])
+        invalid['schema']=99
+        rows['studio/projects.jsonl'][0]['committed']=json.dumps(invalid)
+        self.make(rows=rows,schema_version=3)
+        with self.assertRaises(self.stage.RecordError):
+            with self.stage.stage_archive(self.archive,temp_dir=self.root): pass
+
+    def test_schema2_rejects_studio_records_instead_of_silent_drop(self):
+        rows=self.studio_rows()
+        self.make(rows=rows,schema_version=2)
+        with self.assertRaises(self.stage.archive.ArchiveError):
+            with self.stage.stage_archive(self.archive,temp_dir=self.root): pass
+
+    def test_schema3_plain_and_encrypted_profiles(self):
+        for profile in ('BRAIN_ONLY','BRAIN_WITH_FILES','FULL_USER_BACKUP'):
+            with self.subTest(profile=profile):
+                self.make(rows=self.studio_rows(),schema_version=3,profile=profile,
+                    encrypted=(profile=='FULL_USER_BACKUP'))
+                password='pass-✓'.encode() if profile=='FULL_USER_BACKUP' else None
+                with self.stage.stage_archive(self.archive,password,temp_dir=self.root) as staged:
+                    self.assertEqual(staged.schema_version,3)
+                    self.assertEqual(staged.record_count,23)
 
     def test_cli_and_modules_exist(self): self.assertTrue(CLI.exists())
     def test_preserves_all_record_fields_and_nullable_confidence(self):

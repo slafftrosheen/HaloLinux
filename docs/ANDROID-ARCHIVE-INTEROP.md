@@ -46,7 +46,7 @@ an authorization signal to restore settings, pair devices or execute agent runs.
 
 ## Compatibility reference and keeping it synchronized
 
-The reviewed Android revision is `c474e35df750ebeb896b3eacc8bacf154c344bd6`.
+The reviewed Android archive revision is `92370f6cd173affe1b9800fdc3b97a9e05559589` (schema 3). Schema 2 remains supported for older exports.
 `config/halobrain-contract.json` records the exact Git blob IDs for
 `BrainArchiveModels.kt`, `BrainArchiveCrypto.kt` and `ZipBrainExporter.kt`.
 
@@ -63,7 +63,7 @@ The archive reference is separate from `config/canonical-halo.sha`. This change
 does **not** move the seven portable runtime modules to a new Android revision.
 No automatic updater, GitHub Actions job or background service is added.
 
-Supported today: schema 2, section version 1, all three profiles (`BRAIN_ONLY`,
+Supported today: schema 2 and schema 3, section version 1, all three profiles (`BRAIN_ONLY`,
 `BRAIN_WITH_FILES`, `FULL_USER_BACKUP`), optional activity history and envelope
 version 1. The envelope uses Android's big-endian header, PBKDF2-HMAC-SHA256,
 AES-256-GCM, a 128-bit tag and the full header as associated authenticated data.
@@ -76,7 +76,7 @@ any ZIP or JSON bytes. It checks the manifest, state, completion proof, SHA-256
 coverage of every content entry, section counts, and JSON/JSONL syntax. It rejects
 ambiguous paths, links/special files, duplicates, unsupported entries, header/
 directory inconsistencies, overlapping entries, gaps, truncation and trailing data.
-ZIP64, split archives and schema 1/future versions are intentionally unsupported.
+ZIP64, split archives, schema 1 and future schema versions are intentionally unsupported.
 
 Archive limits match Android's current conservative size limits: 2 GiB input,
 50,000 entries, 512 MiB per expanded entry, 4 GiB total expanded data and 200:1
@@ -114,6 +114,19 @@ retain password/key copies, so guaranteed key-memory zeroization is not claimed.
 Unencrypted SHA-256/completion checks detect inconsistency, not a malicious producer
 who can recompute them. AES-GCM authenticates possession of the password, not a
 paired Halo peer's identity or permission to import data.
+
+
+## Studio section (schema 3)
+
+Android schema 3 always includes `studio/projects.jsonl` and `studio/versions.jsonl`,
+even when both are empty. Older schema 2 archives must not contain Studio entries.
+The verifier checks both files, section counts, complete SHA-256 coverage and the
+completion marker. Normal JSONL retains a 1 MiB record limit; Studio JSONL has a
+separate conservative 32 MiB bound for encoded undo/redo histories. The importer
+additionally validates basic Studio document/session shapes and version ownership,
+but does **not** run Android InkCodec or render/edit Studio content. A valid
+archive is not authorization to open referenced files or activate agent tools.
+See [Studio archive import](ANDROID-STUDIO-ARCHIVE.md).
 
 ## Verification and reproducible cross-language fixture
 

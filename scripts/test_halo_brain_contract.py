@@ -29,6 +29,8 @@ class ContractTests(unittest.TestCase):
     def test_enums_track_reader_and_record_contract(self):
         s=self.document['components']['schemas']
         self.assertEqual(set(s['ListRequest']['properties']['kind']['enum']),KINDS)
+        self.assertEqual(set(s['ReadRequest']['properties']['kind']['enum']), KINDS)
+        self.assertEqual(set(s['Citation']['properties']['kind']['enum']), KINDS)
         self.assertEqual(set(s['MemorySearchRequest']['properties']['scope']['enum']),SCOPES)
         self.assertEqual(set(s['Candidate']['properties']['kind']['enum']),MEMORY_KINDS)
 

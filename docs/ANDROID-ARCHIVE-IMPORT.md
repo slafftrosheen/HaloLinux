@@ -124,7 +124,7 @@ Listing is bounded to 200 keys and returns `next_offset` for the next page. Read
 return escaped JSON, not terminal control sequences. Kinds cover workspace, note,
 conversation, turn, memory, legacy-memory, memory-revision, episode,
 suggestion-decision, reflection-status, working-set, provenance, relation, file,
-agent-run, agent-step, reminder, device and settings. The settings key is
+agent-run, agent-step, reminder, device, settings, studio-project and studio-version. The settings key is
 `user-settings`; legacy-memory keys are the decimal Android legacy IDs.
 
 Every original entry (including attachments, Markdown, manifest and checksums) is
@@ -187,7 +187,7 @@ ordinary interruption exits 130. Fixed error messages do not echo private values
 
 ## Contract tracking and verification
 
-Archive/DTO reference: Android `023ef76013b599ee7ca3513014af184a5242e2b5`.
+Archive/DTO reference: Android `92370f6cd173affe1b9800fdc3b97a9e05559589` (schema 3; legacy schema 2 retained). Studio document shape is separately validated and remains inactive; see [Studio archive compatibility](ANDROID-STUDIO-ARCHIVE.md).
 `config/halobrain-contract.json` now includes `BrainSnapshot.kt` as well as the
 models, crypto and exporter. Their first three blob IDs are unchanged from 051.
 Run the existing byte-based checker against a complete local Android checkout:

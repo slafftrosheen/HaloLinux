@@ -1,13 +1,23 @@
 {
   "repository": "slafftrosheen/Halo",
-  "reviewed_revision": "023ef76013b599ee7ca3513014af184a5242e2b5",
-  "schema_version": 2,
+  "reviewed_revision": "92370f6cd173affe1b9800fdc3b97a9e05559589",
+  "schema_version": 3,
   "envelope_version": 1,
   "sources": {
-    "app/src/main/java/com/halo/app/backup/BrainArchiveModels.kt": "3306463bca4e5aba934669e4b813fbb583e5b79d",
+    "app/src/main/java/com/halo/app/backup/BrainArchiveModels.kt": "6b20d04d39d0a877ce6244da16b81b33157860ed",
     "app/src/main/java/com/halo/app/backup/BrainArchiveCrypto.kt": "9a1631d5736f96d1907f47b3a848d29f10783cef",
-    "app/src/main/java/com/halo/app/backup/ZipBrainExporter.kt": "071a15c1e845989c7c6a975baeef83da53b1cd60",
-    "app/src/main/java/com/halo/app/backup/BrainSnapshot.kt": "e1ac70057ed85a0213bec42df1a292702d61b810"
+    "app/src/main/java/com/halo/app/backup/ZipBrainExporter.kt": "f3edf33ddd36658d0db15318eb7adaf72a631870",
+    "app/src/main/java/com/halo/app/backup/BrainSnapshot.kt": "486eb4ca8bae46a9f132aee8c87c868bfa7772b2",
+    "app/src/main/java/com/halo/app/backup/BrainImportRepository.kt": "0d3d4312543c45677b3fdcd27eb054e0eb766f14",
+    "app/src/main/java/com/halo/app/backup/StudioSnapshots.kt": "0fe0fe8c2fd3a2ff2f6be6ac2bf2226eb83cf6d8",
+    "app/src/main/java/com/halo/app/data/studio/StudioDocument.kt": "adfffb7dea992c46f4bbee71374411581ea111f0",
+    "app/src/main/java/com/halo/app/data/studio/StudioDocumentCodec.kt": "1e8b57d158fbab8b2af306a5fa29f46219801b5b",
+    "app/src/main/java/com/halo/app/data/studio/StudioProjectRepository.kt": "b8d045e60dd0feb9674b8fa8fc2c49105b85192c",
+    "app/src/main/java/com/halo/app/data/workspace/CanvasImageRecipe.kt": "b265787f7df17230e3fb78f1ab88cea376b788d6"
   },
-  "note": "Archive/record compatibility reference only. Does not change config/canonical-halo.sha or claim runtime source alignment to this revision. DTO types are checked while raw fields and entries remain intact; import-store data is not activated in the JVM runtime."
+  "note": "Archive/Studio DTO compatibility review reference only; not the canonical seven-module runtime pin. Linux validates Studio structure conservatively but does not interpret InkCodec, activate records, grant access to assets or implement Android Studio. All raw archive bytes/unknown DTO fields remain unchanged in the import store.",
+  "supported_schema_versions": [
+    2,
+    3
+  ]
 }
